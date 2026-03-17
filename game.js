@@ -138,6 +138,47 @@ let currentPlayer = null;
 let profile = null;
 let deferredPrompt = null;
 
+let audioCtx = null;
+function ensureAudio(){
+  if (!audioCtx){
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (Ctx) audioCtx = new Ctx();
+  }
+  if (audioCtx && audioCtx.state === "suspended"){
+    audioCtx.resume();
+  }
+}
+function playTone(kind){
+  ensureAudio();
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  if (kind === "hit"){
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(740, now);
+    osc.frequency.exponentialRampToValueAtTime(980, now + 0.12);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+    osc.start(now);
+    osc.stop(now + 0.18);
+  } else {
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(240, now);
+    osc.frequency.exponentialRampToValueAtTime(170, now + 0.18);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.07, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+    osc.start(now);
+    osc.stop(now + 0.22);
+  }
+}
+
+
 function loadProfiles(){ return JSON.parse(localStorage.getItem("mathRainProfiles") || "{}"); }
 function saveProfiles(data){ localStorage.setItem("mathRainProfiles", JSON.stringify(data)); }
 function getOrCreateProfile(name){
@@ -264,6 +305,7 @@ function animate(){
       lives -= 1; streak = 0;
       livesEl.textContent = lives; streakEl.textContent = streak;
       setMessage(`Se escapó ${drop.exp}. Resultado: ${drop.ans}`);
+      playTone("miss");
       updateProfileField(p => { p.totalMisses = (p.totalMisses || 0) + 1; });
     } else survivors.push(drop);
   }
@@ -287,13 +329,16 @@ function maybeUnlockLevel(){
 }
 function checkAnswer(){
   if (!running || paused) return;
-  const value = Number(answerInput.value);
+  const rawValue = String(answerInput.value || "").trim();
+  if (!rawValue) return;
+  const value = Number(rawValue.replace(/[^0-9]/g, ""));
   if (!Number.isFinite(value)) return;
   const candidates = activeDrops.filter(d => d.ans === value);
   if (!candidates.length){
     streak = 0; streakEl.textContent = streak;
     setMessage(`No hay ninguna gota con resultado ${value}.`);
     answerInput.value = "";
+    playTone("miss");
     updateProfileField(p => { p.totalMisses = (p.totalMisses || 0) + 1; });
     return;
   }
@@ -311,6 +356,7 @@ function checkAnswer(){
   scoreEl.textContent = score; streakEl.textContent = streak;
   setMessage(`✔ ${hit.exp} = ${hit.ans} | +${gained} puntos`);
   answerInput.value = "";
+  playTone("hit");
   updateProfileField(p => { p.totalCorrect = (p.totalCorrect || 0) + 1; p.bestScore = Math.max(p.bestScore || 0, score); });
   maybeUnlockLevel(); updateDifficulty();
 }
@@ -360,6 +406,14 @@ window.addEventListener("beforeinstallprompt", e => {
 if ("serviceWorker" in navigator){
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js"));
 }
+
+answerInput.addEventListener("input", () => {
+  answerInput.value = answerInput.value.replace(/[^0-9]/g, "");
+});
+["click","touchstart","keydown"].forEach(evt => {
+  window.addEventListener(evt, () => ensureAudio(), { once: true });
+});
+
 setMessage("Escribe el nombre del jugador para empezar.");
 playerModal.classList.add("visible");
 playerNameInput.focus();

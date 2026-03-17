@@ -37,3 +37,17 @@ Arquitectura recomendada para una V4 online:
 - backend: Firebase o Supabase
 - ranking: base de datos online
 - perfiles: nube + localStorage
+
+
+ACTUALIZACIÓN iPHONE / SONIDOS
+- El campo de respuesta ahora usa:
+  type="text" + inputmode="numeric" + pattern="[0-9]*" + enterkeyhint="done"
+- En muchos iPhone esto muestra una tecla de confirmación más amigable que con type="number".
+- Aun así, Safari/iOS no siempre garantiza un botón Enter visible en todos los teclados numéricos.
+- Por eso se mantiene también el botón "Aceptar" de la interfaz.
+
+SONIDOS
+- Se han añadido sonidos generados por Web Audio:
+  - acierto
+  - fallo
+- No necesitan archivos mp3 y funcionan bien en móvil y escritorio tras la primera interacción del usuario.
