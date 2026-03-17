@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c2431" />
+  <title>Lluvia de Cálculo Mental Web</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>🌧️ Lluvia de Cálculo Mental</h1>
+        <p>Versión web móvil · iPhone · Android · Navegador</p>
+      </div>
+      <div class="panel status">
+        <div><span>Jugador</span><strong id="playerNameView">-</strong></div>
+        <div><span>Puntos</span><strong id="score">0</strong></div>
+        <div><span>Vidas</span><strong id="lives">5</strong></div>
+        <div><span>Racha</span><strong id="streak">0</strong></div>
+        <div><span>Nivel</span><strong id="level">1</strong></div>
+        <div><span>Récord</span><strong id="bestScore">0</strong></div>
+      </div>
+    </header>
+
+    <section class="hud">
+      <div class="panel controls">
+        <label>
+          Modo
+          <select id="modeSelect">
+            <option value="facil">Fácil</option>
+            <option value="entrenamiento">Entrenamiento</option>
+            <option value="niveles">Mejora por niveles</option>
+            <option value="supervivencia">Supervivencia</option>
+          </select>
+        </label>
+
+        <label>
+          Familia
+          <select id="familySelect">
+            <option value="todas">Todas</option>
+            <option value="multiplicaciones">Multiplicaciones</option>
+            <option value="sumas">Sumas</option>
+            <option value="restas">Restas</option>
+            <option value="mixtas">Mixtas</option>
+          </select>
+        </label>
+
+        <button id="startBtn">Iniciar</button>
+        <button id="pauseBtn">Pausa</button>
+        <button id="resetBtn">Reiniciar</button>
+        <button id="installBtn" class="secondary">Instalar</button>
+      </div>
+
+      <div class="panel inputPanel">
+        <label for="answerInput">Respuesta</label>
+        <div class="answerRow">
+          <input id="answerInput" type="number" inputmode="numeric" placeholder="Escribe el resultado" autocomplete="off" />
+          <button id="sendBtn">Aceptar</button>
+        </div>
+        <small>Compatible con teclado numérico y con el teclado del móvil.</small>
+      </div>
+    </section>
+
+    <main id="gameArea">
+      <div id="forestGlow"></div>
+      <div id="ground"></div>
+      <div id="message"></div>
+    </main>
+
+    <section class="bottomGrid">
+      <section class="panel help">
+        <h2>Cómo jugar</h2>
+        <ul>
+          <li><strong>Fácil:</strong> muy lento y con operaciones sencillas.</li>
+          <li><strong>Mejora por niveles:</strong> progresión gradual por dificultad.</li>
+          <li><strong>Supervivencia:</strong> reto rápido y varias gotas.</li>
+        </ul>
+      </section>
+
+      <section class="panel battlePanel">
+        <h2>Modo batalla</h2>
+        <p>
+          Esta versión incluye la base visual para una futura batalla online, pero
+          para que funcione en red de verdad hace falta un servidor o backend.
+        </p>
+        <div class="battleGrid">
+          <div>
+            <span>Estado</span>
+            <strong>Preparado para versión online</strong>
+          </div>
+          <div>
+            <span>Ideal para</span>
+            <strong>1 vs 1 con amigo</strong>
+          </div>
+          <div>
+            <span>Tecnología sugerida</span>
+            <strong>WebSocket / Firebase / Supabase</strong>
+          </div>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <div id="playerModal" class="modal visible">
+    <div class="modalCard">
+      <h2>👋 Bienvenido</h2>
+      <p>Escribe el nombre del jugador para guardar su progreso en este dispositivo.</p>
+      <div class="answerRow">
+        <input id="playerNameInput" type="text" maxlength="24" placeholder="Nombre del jugador" autocomplete="off" />
+        <button id="savePlayerBtn">Guardar</button>
+      </div>
+      <div id="playerHistory" class="playerHistory"></div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

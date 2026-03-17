@@ -1,0 +1,39 @@
+DESPLIEGUE WEB
+
+Este paquete ya está preparado para publicarlo como página web y abrirlo mediante enlace.
+
+Opciones sencillas:
+1. GitHub Pages
+2. Netlify
+3. Vercel
+4. Cualquier hosting estático
+
+Pasos básicos:
+- Sube todos los archivos tal como están.
+- Publica la carpeta raíz.
+- Obtendrás un enlace web.
+- Ese enlace se abrirá en iPhone, Android, iPad y ordenador.
+
+APP EN MÓVIL
+- Android: el navegador puede mostrar "Instalar".
+- iPhone: abre el enlace en Safari > Compartir > Añadir a pantalla de inicio.
+
+MODO BATALLA ONLINE
+Esta versión NO incluye red real todavía.
+Para 1 vs 1 con amigo habría que añadir backend en tiempo real, por ejemplo:
+- Firebase Realtime Database / Firestore
+- Supabase Realtime
+- WebSocket propio con Node.js
+
+Qué habría en esa versión:
+- crear sala
+- unirse por código
+- empezar ambos a la vez
+- comparar puntos, vidas y precisión
+- ganador final
+
+Arquitectura recomendada para una V4 online:
+- frontend: HTML/CSS/JS
+- backend: Firebase o Supabase
+- ranking: base de datos online
+- perfiles: nube + localStorage
