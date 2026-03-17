@@ -51,3 +51,14 @@ SONIDOS
   - acierto
   - fallo
 - No necesitan archivos mp3 y funcionan bien en móvil y escritorio tras la primera interacción del usuario.
+
+
+PANEL NUMÉRICO V3
+- Se ha añadido un panel numérico integrado en la propia web.
+- Esto evita depender del botón Enter del teclado de iPhone.
+- Se puede seguir usando el teclado físico en ordenador.
+- El panel incluye:
+  - números del 0 al 9
+  - botón C para borrar
+  - botón OK para enviar
+- También incorpora un pequeño sonido táctil al pulsar botones.
