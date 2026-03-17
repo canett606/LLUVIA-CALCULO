@@ -53,17 +53,32 @@ background:radial-gradient(circle at 20% 20%, rgba(98,214,255,.08), transparent 
 }
 
 
-.keypadPanel h2{
-  margin:0 0 12px;
+
+.keypadPanel{
+  margin-top:14px;
+  padding:14px;
+}
+.keypadHeader{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+.keypadHeader h2{
+  margin:0;
+}
+.keypadHeader small{
+  color:var(--muted);
 }
 .keypad{
   display:grid;
-  grid-template-columns:repeat(3, minmax(72px, 1fr));
+  grid-template-columns:repeat(3, minmax(90px, 1fr));
   gap:10px;
 }
 .key{
-  min-height:64px;
-  font-size:1.35rem;
+  min-height:70px;
+  font-size:1.45rem;
   font-weight:800;
   border-radius:16px;
   background:linear-gradient(180deg, #eef8fd, #d7f0fb);
@@ -83,13 +98,20 @@ background:radial-gradient(circle at 20% 20%, rgba(98,214,255,.08), transparent 
   background:linear-gradient(180deg, #a9f2cf, #7fe5ba);
   color:#083824;
 }
+.key-clear{
+  grid-column:1 / -1;
+  min-height:58px;
+  font-size:1.1rem;
+  background:linear-gradient(180deg, #fff2d7, #ffe1a4);
+  color:#5d4100;
+}
 @media (max-width:900px){
   .keypad{
     grid-template-columns:repeat(3, 1fr);
     gap:12px;
   }
   .key{
-    min-height:72px;
-    font-size:1.5rem;
+    min-height:76px;
+    font-size:1.55rem;
   }
 }

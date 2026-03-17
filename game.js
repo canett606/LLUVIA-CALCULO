@@ -417,3 +417,36 @@ answerInput.addEventListener("input", () => {
 setMessage("Escribe el nombre del jugador para empezar.");
 playerModal.classList.add("visible");
 playerNameInput.focus();
+
+
+const keypad = $("keypad");
+if (keypad){
+  keypad.addEventListener("click", (e) => {
+    const btn = e.target.closest(".key");
+    if (!btn) return;
+    ensureAudio();
+    playTap();
+    const key = btn.dataset.key;
+    const action = btn.dataset.action;
+
+    if (key !== undefined){
+      answerInput.value = String(answerInput.value || "") + key;
+      answerInput.focus();
+      return;
+    }
+    if (action === "clear"){
+      answerInput.value = "";
+      answerInput.focus();
+      return;
+    }
+    if (action === "backspace"){
+      answerInput.value = String(answerInput.value || "").slice(0, -1);
+      answerInput.focus();
+      return;
+    }
+    if (action === "submit"){
+      checkAnswer();
+      answerInput.focus();
+    }
+  });
+}
