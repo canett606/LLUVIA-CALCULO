@@ -207,10 +207,10 @@ abstract class MultiplayerService {
 /// Implementación con Firebase Realtime Database
 /// URL configurable - si no responde, falla con mensaje claro
 class FirebaseMultiplayerService implements MultiplayerService {
-  // URL de Firebase RTDB - configurar con proyecto real de Pablo
+  // URL de Firebase RTDB - proyecto real de Pablo
   static const String _firebaseUrl = String.fromEnvironment(
     'FIREBASE_RTDB_URL',
-    defaultValue: 'https://lluvia-calculo-default-rtdb.firebaseio.com',
+    defaultValue: 'https://lluvia-calculo-app-default-rtdb.europe-west1.firebasedatabase.app',
   );
   
   final _connectionStateController = StreamController<MultiplayerConnectionState>.broadcast();
@@ -275,12 +275,13 @@ class FirebaseMultiplayerService implements MultiplayerService {
     _playerName = playerName;
     _errorMessage = null;
     
-    // Verificar si Firebase está disponible
+    // Verificar si Firebase está disponible (probe /rooms, no root)
     try {
       final response = await http.get(
-        Uri.parse('$_firebaseUrl/.json?shallow=true'),
+        Uri.parse('$_firebaseUrl/rooms.json?shallow=true'),
       ).timeout(const Duration(seconds: 5));
       
+      // 200 (incluso con body null) significa backend up
       _backendAvailable = response.statusCode == 200;
     } catch (e) {
       _backendAvailable = false;
@@ -311,11 +312,11 @@ class FirebaseMultiplayerService implements MultiplayerService {
     
     _errorMessage = null;
     
-    // Verificar backend
+    // Verificar backend (probe /rooms, no root)
     if (!_backendAvailable) {
       try {
         final response = await http.get(
-          Uri.parse('$_firebaseUrl/.json?shallow=true'),
+          Uri.parse('$_firebaseUrl/rooms.json?shallow=true'),
         ).timeout(const Duration(seconds: 5));
         _backendAvailable = response.statusCode == 200;
       } catch (e) {
@@ -368,7 +369,7 @@ class FirebaseMultiplayerService implements MultiplayerService {
         _errorMessage = 'No se pudo crear la sala. Inténtalo de nuevo.';
       }
     } catch (e) {
-      _errorMessage = 'No se pudo crear la sala. Verifica tu conexión.';
+      _errorMessage = 'No se pudo crear la sala. El servidor no está disponible.';
     }
     
     _eventController.add(MultiplayerEvent(
@@ -458,7 +459,7 @@ class FirebaseMultiplayerService implements MultiplayerService {
         _errorMessage = 'No se pudo unir a la sala. Inténtalo de nuevo.';
       }
     } catch (e) {
-      _errorMessage = 'No se pudo unir a la sala. Verifica tu conexión.';
+      _errorMessage = 'No se pudo unir a la sala. El servidor no está disponible.';
     }
     
     _eventController.add(MultiplayerEvent(
