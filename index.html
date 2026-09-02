@@ -7,7 +7,7 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Lluvia de Cálculo Mental - Mejora tu cálculo mental jugando">
   
-  <!-- CRITICAL: Viewport for iOS Safari - no zoom, full screen, safe area -->
+  <!-- Viewport for iOS Safari - full screen, safe area, no zoom -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   
   <!-- iOS Web App meta tags -->
@@ -25,21 +25,24 @@
   <link rel="manifest" href="manifest.json">
   
   <style>
-    /* Prevent iOS Safari from showing text selection / callout on long press */
+    /* Prevent text selection and callout on iOS */
     * {
       -webkit-touch-callout: none;
       -webkit-user-select: none;
       user-select: none;
       -webkit-tap-highlight-color: transparent;
     }
-    /* Respect safe areas on iPhone X+ */
     html, body {
-      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
       margin: 0;
+      padding: 0;
       height: 100%;
-      overflow: hidden;
+      width: 100%;
       background-color: #07131D;
+      /* Allow scroll on menu screens, Flutter handles its own layout */
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
     }
+    /* Safe area padding handled by Flutter's SafeArea widget */
   </style>
 </head>
 <body>

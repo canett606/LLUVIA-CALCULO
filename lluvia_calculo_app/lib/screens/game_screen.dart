@@ -11,10 +11,9 @@ import '../widgets/falling_drop.dart';
 import '../widgets/numeric_keypad.dart';
 
 /// Pantalla principal del juego.
-/// Layout diseñado para móvil en retrato:
-/// - HUD compacto arriba
-/// - Área de juego en el centro (siempre visible)
-/// - Teclado numérico fijo abajo (siempre visible)
+/// Layout diseñado para iPhone portrait (390×844):
+/// - ANTES de jugar: pantalla de inicio a pantalla completa, SIN teclado
+/// - DURANTE la partida: HUD compacto + área de gotas + teclado compacto
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
 
@@ -26,7 +25,6 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void initState() {
     super.initState();
-    // Ocultar overlays del sistema para maximizar espacio
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.edgeToEdge,
       overlays: [SystemUiOverlay.top],
@@ -38,9 +36,12 @@ class _GameScreenState extends State<GameScreen> {
     final provider = context.watch<GameProvider>();
     final state = provider.state;
     final profile = provider.currentProfile;
+    
+    // Determinar si mostrar el layout de juego activo (con keypad)
+    final bool isActiveGame = state.isRunning && !state.isGameOver;
 
     return Scaffold(
-      resizeToAvoidBottomInset: false, // CRÍTICO: No redimensionar por teclado del sistema
+      resizeToAvoidBottomInset: false,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -52,84 +53,110 @@ class _GameScreenState extends State<GameScreen> {
             ],
           ),
         ),
-        child: Column(
-          children: [
-            // HUD superior compacto
-            GameHud(
-              state: state,
-              profile: profile,
-              onPause: state.isRunning ? provider.togglePause : null,
-              onSettings: () => _showSettingsSheet(context),
-            ),
-            
-            // Área de juego (expandible)
-            Expanded(
-              flex: 3,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: _buildGameArea(context, state, provider),
-              ),
-            ),
-            
-            // Teclado numérico fijo
-            NumericKeypad(
-              currentValue: provider.inputBuffer,
-              enabled: state.isRunning && !state.isPaused,
-              onDigit: provider.appendDigit,
-              onBackspace: provider.backspace,
-              onClear: provider.clearInput,
-              onSubmit: provider.submitAnswer,
-            ),
-          ],
+        child: SafeArea(
+          bottom: false,
+          child: isActiveGame
+            ? _buildActiveGameLayout(context, provider, state, profile)
+            : _buildMenuLayout(context, provider, state, profile),
         ),
       ),
     );
   }
 
-  Widget _buildGameArea(BuildContext context, GameState state, GameProvider provider) {
-    // Estado: No iniciado
-    if (!state.isRunning && !state.isGameOver) {
-      return _StartScreen(
-        mode: state.mode,
-        family: state.selectedFamily,
-        onModeChanged: provider.setMode,
-        onFamilyChanged: provider.setFamily,
-        onStart: provider.startGame,
-      );
-    }
-    
-    // Estado: Pausado
-    if (state.isPaused) {
-      return Stack(
-        children: [
-          GamePlayfield(
-            drops: state.activeDrops,
-            message: null,
+  /// Layout cuando el juego está activo: HUD + Playfield + Keypad
+  Widget _buildActiveGameLayout(
+    BuildContext context,
+    GameProvider provider,
+    GameState state,
+    PlayerProfile? profile,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final totalHeight = constraints.maxHeight;
+        
+        // Distribuir altura: HUD ~48px, Keypad ~38%, Playfield el resto
+        const hudHeight = 48.0;
+        final keypadHeight = (totalHeight * 0.38).clamp(180.0, 320.0);
+        final playfieldHeight = totalHeight - hudHeight - keypadHeight;
+        
+        return Column(
+          children: [
+            // HUD compacto
+            SizedBox(
+              height: hudHeight,
+              child: _CompactHud(
+                state: state,
+                profile: profile,
+                onPause: provider.togglePause,
+              ),
+            ),
+            
+            // Área de juego
+            SizedBox(
+              height: playfieldHeight,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: state.isPaused
+                  ? Stack(
+                      children: [
+                        GamePlayfield(drops: state.activeDrops, message: null),
+                        _PauseOverlay(
+                          onResume: provider.togglePause,
+                          onQuit: provider.resetGame,
+                        ),
+                      ],
+                    )
+                  : GamePlayfield(
+                      drops: state.activeDrops,
+                      message: state.lastMessage,
+                    ),
+              ),
+            ),
+            
+            // Teclado numérico compacto
+            SizedBox(
+              height: keypadHeight,
+              child: SafeArea(
+                top: false,
+                child: CompactNumericKeypad(
+                  currentValue: provider.inputBuffer,
+                  onDigit: provider.appendDigit,
+                  onBackspace: provider.backspace,
+                  onClear: provider.clearInput,
+                  onSubmit: provider.submitAnswer,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Layout para menú (inicio y game over): pantalla completa, SIN keypad
+  Widget _buildMenuLayout(
+    BuildContext context,
+    GameProvider provider,
+    GameState state,
+    PlayerProfile? profile,
+  ) {
+    return SafeArea(
+      child: state.isGameOver
+        ? _GameOverScreen(
+            state: state,
+            profile: profile,
+            onRestart: provider.resetGame,
+            onChangeMode: provider.resetGame,
+          )
+        : _StartScreen(
+            mode: state.mode,
+            family: state.selectedFamily,
+            profile: profile,
+            onModeChanged: provider.setMode,
+            onFamilyChanged: provider.setFamily,
+            onStart: provider.startGame,
+            onSettings: () => _showSettingsSheet(context),
           ),
-          _PauseOverlay(
-            onResume: provider.togglePause,
-            onQuit: provider.resetGame,
-          ),
-        ],
-      );
-    }
-    
-    // Estado: Game Over
-    if (state.isGameOver) {
-      return _GameOverScreen(
-        state: state,
-        profile: provider.currentProfile,
-        onRestart: provider.resetGame,
-        onChangeMode: () {
-          provider.resetGame();
-        },
-      );
-    }
-    
-    // Estado: Jugando
-    return GamePlayfield(
-      drops: state.activeDrops,
-      message: state.lastMessage,
     );
   }
 
@@ -145,118 +172,22 @@ class _GameScreenState extends State<GameScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Configuración',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
+              Text('Configuración', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 16),
-              
-              // Toggle sonido
               SwitchListTile(
                 title: const Text('Sonido'),
-                subtitle: const Text('Efectos de acierto/fallo'),
                 value: provider.soundEnabled,
                 onChanged: (_) => provider.toggleSound(),
               ),
-              
               const Divider(),
-              
-              // Reiniciar partida
-              if (provider.state.isRunning)
-                ListTile(
-                  leading: const Icon(Icons.refresh),
-                  title: const Text('Reiniciar partida'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    provider.resetGame();
-                  },
-                ),
-              
-              // Cambiar jugador
               ListTile(
                 leading: const Icon(Icons.person),
                 title: const Text('Cambiar jugador'),
-                subtitle: Text(provider.currentProfile?.name ?? 'Sin jugador'),
+                subtitle: Text(provider.currentProfile?.name ?? ''),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).pushReplacementNamed('/welcome');
                 },
-              ),
-              
-              // Ver ranking
-              ListTile(
-                leading: const Icon(Icons.leaderboard),
-                title: const Text('Ranking local'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showRankingSheet(context);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showRankingSheet(BuildContext context) async {
-    final provider = context.read<GameProvider>();
-    final ranking = await provider.getLocalRanking();
-    
-    if (!mounted) return;
-    
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        minChildSize: 0.5,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (context, scrollController) => SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  '🏆 Ranking Local',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-              Expanded(
-                child: ranking.isEmpty
-                  ? const Center(
-                      child: Text('Aún no hay partidas registradas'),
-                    )
-                  : ListView.builder(
-                      controller: scrollController,
-                      itemCount: ranking.length,
-                      itemBuilder: (context, index) {
-                        final entry = ranking[index];
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: index == 0
-                              ? Colors.amber
-                              : index == 1
-                                ? Colors.grey[400]
-                                : index == 2
-                                  ? Colors.brown[300]
-                                  : null,
-                            child: Text('${index + 1}'),
-                          ),
-                          title: Text(entry.playerName),
-                          subtitle: Text(
-                            '${entry.mode} · ${(entry.accuracy * 100).toStringAsFixed(0)}% precisión',
-                          ),
-                          trailing: Text(
-                            '${entry.score}',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
               ),
             ],
           ),
@@ -266,103 +197,246 @@ class _GameScreenState extends State<GameScreen> {
   }
 }
 
-/// Pantalla de inicio antes de jugar
+/// HUD ultra compacto para durante el juego
+class _CompactHud extends StatelessWidget {
+  final GameState state;
+  final PlayerProfile? profile;
+  final VoidCallback onPause;
+
+  const _CompactHud({
+    required this.state,
+    required this.profile,
+    required this.onPause,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0C2431).withAlpha(230),
+      ),
+      child: Row(
+        children: [
+          // Score
+          _MiniStat(icon: Icons.star, value: '${state.score}', color: Colors.amber),
+          const SizedBox(width: 8),
+          // Lives
+          _MiniStat(
+            icon: Icons.favorite,
+            value: state.lives > 99 ? '∞' : '${state.lives}',
+            color: state.lives <= 2 ? Colors.red : Colors.pink,
+          ),
+          const SizedBox(width: 8),
+          // Streak
+          _MiniStat(
+            icon: Icons.local_fire_department,
+            value: '${state.streak}',
+            color: state.streak >= 5 ? Colors.orange : Colors.grey,
+          ),
+          const Spacer(),
+          // Time remaining (if applicable)
+          if (state.timeRemaining != null)
+            Text(
+              '${state.timeRemaining!.inSeconds}s',
+              style: TextStyle(
+                color: state.timeRemaining!.inSeconds <= 10 ? Colors.red : Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          const SizedBox(width: 8),
+          // Pause button
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onPause,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              child: Icon(
+                state.isPaused ? Icons.play_arrow : Icons.pause,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final Color color;
+
+  const _MiniStat({required this.icon, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 2),
+        Text(
+          value,
+          style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+      ],
+    );
+  }
+}
+
+/// Pantalla de inicio - SIN teclado, a pantalla completa
 class _StartScreen extends StatelessWidget {
   final GameMode mode;
   final OperationFamily family;
+  final PlayerProfile? profile;
   final void Function(GameMode) onModeChanged;
   final void Function(OperationFamily) onFamilyChanged;
   final VoidCallback onStart;
+  final VoidCallback onSettings;
 
   const _StartScreen({
     required this.mode,
     required this.family,
+    required this.profile,
     required this.onModeChanged,
     required this.onFamilyChanged,
     required this.onStart,
+    required this.onSettings,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(20),
-      ),
+    return Padding(
+      padding: const EdgeInsets.all(16),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // Header con nombre y settings
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '👋 ${profile?.name ?? "Jugador"}',
+                  style: theme.textTheme.titleMedium?.copyWith(color: Colors.white70),
+                ),
+              ),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onSettings,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  child: const Icon(Icons.settings, color: Colors.white70),
+                ),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Título
           Text(
             '🌧️ Lluvia de Cálculo',
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
+              color: Colors.white,
             ),
           ),
+          
           const SizedBox(height: 24),
           
-          // Selector de modo
-          _buildDropdown<GameMode>(
-            context,
-            label: 'Modo de juego',
-            value: mode,
-            items: GameMode.values,
-            labelBuilder: _getModeLabel,
-            onChanged: onModeChanged,
-          ),
-          const SizedBox(height: 16),
-          
-          // Selector de familia
-          _buildDropdown<OperationFamily>(
-            context,
-            label: 'Tipo de operaciones',
-            value: family,
-            items: OperationFamily.values,
-            labelBuilder: _getFamilyLabel,
-            onChanged: onFamilyChanged,
-          ),
-          const SizedBox(height: 32),
-          
-          // Botón de inicio
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton.icon(
-              onPressed: onStart,
-              icon: const Icon(Icons.play_arrow, size: 28),
-              label: const Text(
-                'INICIAR',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                ),
+          // Contenido principal
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface.withAlpha(230),
+                borderRadius: BorderRadius.circular(16),
               ),
-              style: ElevatedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Selector de modo
+                  _buildDropdown<GameMode>(
+                    context,
+                    label: 'Modo de juego',
+                    value: mode,
+                    items: GameMode.values,
+                    labelBuilder: _getModeLabel,
+                    onChanged: onModeChanged,
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Selector de familia
+                  _buildDropdown<OperationFamily>(
+                    context,
+                    label: 'Tipo de operaciones',
+                    value: family,
+                    items: OperationFamily.values,
+                    labelBuilder: _getFamilyLabel,
+                    onChanged: onFamilyChanged,
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  // Descripción breve
+                  Text(
+                    _getModeDescription(mode),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Botón INICIAR grande y prominente
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: Material(
+                      color: theme.colorScheme.primary,
+                      borderRadius: BorderRadius.circular(16),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: onStart,
+                        child: Center(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.play_arrow, size: 28, color: Colors.black87),
+                              const SizedBox(width: 8),
+                              Text(
+                                'INICIAR',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  
+                  // Stats del jugador
+                  if (profile != null && profile!.bestScore > 0) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Récord: ${profile!.bestScore} pts · ${profile!.totalSessions} partidas',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.amber,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Descripción del modo
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              _getModeDescription(mode),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
             ),
           ),
         ],
@@ -389,24 +463,22 @@ class _StartScreen extends StatelessWidget {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: theme.colorScheme.outline.withOpacity(0.3),
-            ),
+            borderRadius: BorderRadius.circular(10),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<T>(
               value: value,
               isExpanded: true,
+              isDense: true,
               items: items.map((item) => DropdownMenuItem(
                 value: item,
-                child: Text(labelBuilder(item)),
+                child: Text(labelBuilder(item), style: const TextStyle(fontSize: 14)),
               )).toList(),
               onChanged: (v) => v != null ? onChanged(v) : null,
             ),
@@ -418,48 +490,32 @@ class _StartScreen extends StatelessWidget {
 
   String _getModeLabel(GameMode mode) {
     switch (mode) {
-      case GameMode.aprendizaje:
-        return '📚 Aprendizaje';
-      case GameMode.porTiempo:
-        return '⏱️ Contrarreloj';
-      case GameMode.porPuntuacion:
-        return '🎯 Por puntuación';
-      case GameMode.supervivencia:
-        return '💀 Supervivencia';
-      case GameMode.porNiveles:
-        return '📈 Por niveles';
+      case GameMode.aprendizaje: return '📚 Aprendizaje';
+      case GameMode.porTiempo: return '⏱️ Contrarreloj';
+      case GameMode.porPuntuacion: return '🎯 Por puntuación';
+      case GameMode.supervivencia: return '💀 Supervivencia';
+      case GameMode.porNiveles: return '📈 Por niveles';
     }
   }
 
   String _getFamilyLabel(OperationFamily family) {
     switch (family) {
-      case OperationFamily.todas:
-        return '🔢 Todas';
-      case OperationFamily.sumas:
-        return '➕ Sumas';
-      case OperationFamily.restas:
-        return '➖ Restas';
-      case OperationFamily.multiplicaciones:
-        return '✖️ Multiplicaciones';
-      case OperationFamily.divisiones:
-        return '➗ Divisiones';
-      case OperationFamily.mixtas:
-        return '🔀 Mixtas';
+      case OperationFamily.todas: return '🔢 Todas';
+      case OperationFamily.sumas: return '➕ Sumas';
+      case OperationFamily.restas: return '➖ Restas';
+      case OperationFamily.multiplicaciones: return '✖️ Multiplicaciones';
+      case OperationFamily.divisiones: return '➗ Divisiones';
+      case OperationFamily.mixtas: return '🔀 Mixtas';
     }
   }
 
   String _getModeDescription(GameMode mode) {
     switch (mode) {
-      case GameMode.aprendizaje:
-        return 'Empieza con operaciones fáciles y sube gradualmente según tu rendimiento. Ideal para principiantes.';
-      case GameMode.porTiempo:
-        return 'Resuelve tantas operaciones como puedas en 90 segundos. ¡Velocidad y precisión!';
-      case GameMode.porPuntuacion:
-        return 'Alcanza 500 puntos lo más rápido posible. Sin límite de vidas.';
-      case GameMode.supervivencia:
-        return 'Sobrevive con 5 vidas mientras la dificultad aumenta progresivamente.';
-      case GameMode.porNiveles:
-        return 'Desbloquea niveles de dificultad demostrando tu maestría en cada uno.';
+      case GameMode.aprendizaje: return 'Empieza fácil y sube gradualmente';
+      case GameMode.porTiempo: return '90 segundos, máxima puntuación';
+      case GameMode.porPuntuacion: return 'Alcanza 500 puntos';
+      case GameMode.supervivencia: return '5 vidas, dificultad creciente';
+      case GameMode.porNiveles: return 'Desbloquea niveles por maestría';
     }
   }
 }
@@ -469,10 +525,7 @@ class _PauseOverlay extends StatelessWidget {
   final VoidCallback onResume;
   final VoidCallback onQuit;
 
-  const _PauseOverlay({
-    required this.onResume,
-    required this.onQuit,
-  });
+  const _PauseOverlay({required this.onResume, required this.onQuit});
 
   @override
   Widget build(BuildContext context) {
@@ -482,36 +535,25 @@ class _PauseOverlay extends StatelessWidget {
       color: Colors.black54,
       child: Center(
         child: Container(
-          margin: const EdgeInsets.all(32),
-          padding: const EdgeInsets.all(24),
+          margin: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.pause_circle, size: 64),
+              const Icon(Icons.pause_circle, size: 48),
+              const SizedBox(height: 12),
+              Text('Pausado', style: theme.textTheme.titleLarge),
               const SizedBox(height: 16),
-              Text(
-                'Juego en Pausa',
-                style: theme.textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 24),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ElevatedButton.icon(
-                    onPressed: onResume,
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Continuar'),
-                  ),
+                  ElevatedButton(onPressed: onResume, child: const Text('Continuar')),
                   const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: onQuit,
-                    icon: const Icon(Icons.exit_to_app),
-                    label: const Text('Salir'),
-                  ),
+                  OutlinedButton(onPressed: onQuit, child: const Text('Salir')),
                 ],
               ),
             ],
@@ -522,7 +564,7 @@ class _PauseOverlay extends StatelessWidget {
   }
 }
 
-/// Pantalla de Game Over
+/// Pantalla de Game Over - SIN teclado
 class _GameOverScreen extends StatelessWidget {
   final GameState state;
   final PlayerProfile? profile;
@@ -539,68 +581,54 @@ class _GameOverScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isVictory = state.mode == GameMode.porTiempo || 
-                      state.mode == GameMode.porPuntuacion;
     
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withOpacity(0.95),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            isVictory ? Icons.emoji_events : Icons.sentiment_dissatisfied,
-            size: 64,
-            color: isVictory ? Colors.amber : theme.colorScheme.error,
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface.withAlpha(240),
+            borderRadius: BorderRadius.circular(20),
           ),
-          const SizedBox(height: 16),
-          Text(
-            isVictory ? '¡Victoria!' : 'Fin del Juego',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                state.score >= (profile?.bestScore ?? 0) ? Icons.emoji_events : Icons.sports_score,
+                size: 56,
+                color: Colors.amber,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Fin del Juego',
+                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              
+              _StatRow(label: 'Puntuación', value: '${state.score}'),
+              _StatRow(label: 'Precisión', value: '${(state.sessionAccuracy * 100).toStringAsFixed(0)}%'),
+              _StatRow(label: 'Aciertos', value: '${state.correctThisSession}'),
+              if (profile != null)
+                _StatRow(
+                  label: 'Récord',
+                  value: '${profile!.bestScore}',
+                  highlight: state.score >= profile!.bestScore,
+                ),
+              
+              const SizedBox(height: 24),
+              
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: onRestart,
+                  icon: const Icon(Icons.replay),
+                  label: const Text('Jugar de nuevo'),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 24),
-          
-          // Estadísticas finales
-          _StatRow(label: 'Puntuación', value: '${state.score}'),
-          _StatRow(
-            label: 'Precisión', 
-            value: '${(state.sessionAccuracy * 100).toStringAsFixed(1)}%',
-          ),
-          _StatRow(label: 'Aciertos', value: '${state.correctThisSession}'),
-          _StatRow(label: 'Nivel alcanzado', value: '${state.level}'),
-          if (profile != null)
-            _StatRow(
-              label: 'Mejor puntuación', 
-              value: '${profile!.bestScore}',
-              highlight: state.score >= profile!.bestScore,
-            ),
-          
-          const SizedBox(height: 32),
-          
-          // Botones
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: onRestart,
-              icon: const Icon(Icons.replay),
-              label: const Text('Jugar de nuevo'),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: onChangeMode,
-              icon: const Icon(Icons.settings),
-              label: const Text('Cambiar modo'),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -611,32 +639,21 @@ class _StatRow extends StatelessWidget {
   final String value;
   final bool highlight;
 
-  const _StatRow({
-    required this.label,
-    required this.value,
-    this.highlight = false,
-  });
+  const _StatRow({required this.label, required this.value, this.highlight = false});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
+          Text(label, style: TextStyle(color: Colors.grey[400])),
           Text(
             value,
-            style: theme.textTheme.titleMedium?.copyWith(
+            style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: highlight ? Colors.amber : null,
+              color: highlight ? Colors.amber : Colors.white,
             ),
           ),
         ],
