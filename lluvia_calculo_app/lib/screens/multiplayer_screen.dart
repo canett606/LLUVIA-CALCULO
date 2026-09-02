@@ -104,8 +104,8 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
 
   Future<void> _joinRoom() async {
     final code = _codeController.text.trim().toUpperCase();
-    if (code.length != 4) {
-      setState(() => _errorMessage = 'El código debe tener 4 caracteres');
+    if (code.length < 4) {
+      setState(() => _errorMessage = 'Introduce el código de la sala');
       return;
     }
     
@@ -298,15 +298,15 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
                   controller: _codeController,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 24,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 8,
+                    letterSpacing: 4,
                   ),
                   textAlign: TextAlign.center,
                   textCapitalization: TextCapitalization.characters,
-                  maxLength: 4,
+                  maxLength: 12,
                   decoration: InputDecoration(
-                    hintText: 'ABCD',
+                    hintText: 'Código',
                     hintStyle: TextStyle(color: Colors.white24),
                     counterText: '',
                     filled: true,
