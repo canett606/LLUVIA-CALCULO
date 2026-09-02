@@ -8,6 +8,8 @@ import 'services/audio_service.dart';
 import 'services/multiplayer_service.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/game_screen.dart';
+import 'screens/multiplayer_screen.dart';
+import 'screens/multiplayer_game_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,11 +49,7 @@ class LluviaCalculoApp extends StatelessWidget {
         ),
         Provider<MultiplayerService>(
           create: (_) => MultiplayerServiceFactory.create(),
-          dispose: (_, service) {
-            if (service is OfflineMultiplayerService) {
-              service.dispose();
-            }
-          },
+          dispose: (_, service) => service.dispose(),
         ),
         
         // Provider principal del juego
@@ -79,6 +77,8 @@ class LluviaCalculoApp extends StatelessWidget {
         routes: {
           '/welcome': (context) => const WelcomeScreen(),
           '/game': (context) => const GameScreen(),
+          '/multiplayer': (context) => const MultiplayerScreen(),
+          '/multiplayer-game': (context) => const MultiplayerGameScreen(),
         },
       ),
     );

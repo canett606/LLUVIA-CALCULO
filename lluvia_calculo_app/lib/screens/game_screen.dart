@@ -383,10 +383,38 @@ class _StartScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              
+              // BOTÓN 1 VS 1
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(context).pushNamed('/multiplayer'),
+                child: Container(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withAlpha(200),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.people, size: 22, color: Colors.black87),
+                      const SizedBox(width: 8),
+                      const Text('1 vs 1 Online',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               
               // Stats
               if (profile != null && profile!.bestScore > 0) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 Text('Récord: ${profile!.bestScore} pts',
                   style: const TextStyle(color: Colors.amber),
                   textAlign: TextAlign.center,

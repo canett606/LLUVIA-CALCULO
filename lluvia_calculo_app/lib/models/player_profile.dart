@@ -2,18 +2,64 @@ import 'dart:convert';
 import 'package:equatable/equatable.dart';
 import 'operation.dart';
 
+/// Estadísticas por tier dentro de una familia
+class TierStats extends Equatable {
+  final int correct;
+  final int incorrect;
+  final double avgTimeMs;
+
+  const TierStats({
+    this.correct = 0,
+    this.incorrect = 0,
+    this.avgTimeMs = 0,
+  });
+
+  double get accuracy => (correct + incorrect) > 0 
+    ? correct / (correct + incorrect) 
+    : 0.0;
+
+  TierStats copyWith({
+    int? correct,
+    int? incorrect,
+    double? avgTimeMs,
+  }) {
+    return TierStats(
+      correct: correct ?? this.correct,
+      incorrect: incorrect ?? this.incorrect,
+      avgTimeMs: avgTimeMs ?? this.avgTimeMs,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'correct': correct,
+    'incorrect': incorrect,
+    'avgTimeMs': avgTimeMs,
+  };
+
+  factory TierStats.fromJson(Map<String, dynamic> json) => TierStats(
+    correct: json['correct'] ?? 0,
+    incorrect: json['incorrect'] ?? 0,
+    avgTimeMs: (json['avgTimeMs'] ?? 0).toDouble(),
+  );
+
+  @override
+  List<Object?> get props => [correct, incorrect, avgTimeMs];
+}
+
 /// Estadísticas por familia de operaciones
 class FamilyStats extends Equatable {
   final int correct;
   final int incorrect;
   final double avgResponseTimeMs;
   final int maxTierUnlocked;
+  final Map<int, TierStats> tierStats;
 
   const FamilyStats({
     this.correct = 0,
     this.incorrect = 0,
     this.avgResponseTimeMs = 0,
     this.maxTierUnlocked = 1,
+    this.tierStats = const {},
   });
 
   double get accuracy => (correct + incorrect) > 0 
@@ -25,12 +71,14 @@ class FamilyStats extends Equatable {
     int? incorrect,
     double? avgResponseTimeMs,
     int? maxTierUnlocked,
+    Map<int, TierStats>? tierStats,
   }) {
     return FamilyStats(
       correct: correct ?? this.correct,
       incorrect: incorrect ?? this.incorrect,
       avgResponseTimeMs: avgResponseTimeMs ?? this.avgResponseTimeMs,
       maxTierUnlocked: maxTierUnlocked ?? this.maxTierUnlocked,
+      tierStats: tierStats ?? this.tierStats,
     );
   }
 
@@ -39,17 +87,31 @@ class FamilyStats extends Equatable {
     'incorrect': incorrect,
     'avgResponseTimeMs': avgResponseTimeMs,
     'maxTierUnlocked': maxTierUnlocked,
+    'tierStats': tierStats.map((k, v) => MapEntry(k.toString(), v.toJson())),
   };
 
-  factory FamilyStats.fromJson(Map<String, dynamic> json) => FamilyStats(
-    correct: json['correct'] ?? 0,
-    incorrect: json['incorrect'] ?? 0,
-    avgResponseTimeMs: (json['avgResponseTimeMs'] ?? 0).toDouble(),
-    maxTierUnlocked: json['maxTierUnlocked'] ?? 1,
-  );
+  factory FamilyStats.fromJson(Map<String, dynamic> json) {
+    final tierStatsJson = json['tierStats'] as Map<String, dynamic>? ?? {};
+    final tierStats = <int, TierStats>{};
+    
+    for (final entry in tierStatsJson.entries) {
+      final tier = int.tryParse(entry.key);
+      if (tier != null) {
+        tierStats[tier] = TierStats.fromJson(entry.value as Map<String, dynamic>);
+      }
+    }
+    
+    return FamilyStats(
+      correct: json['correct'] ?? 0,
+      incorrect: json['incorrect'] ?? 0,
+      avgResponseTimeMs: (json['avgResponseTimeMs'] ?? 0).toDouble(),
+      maxTierUnlocked: json['maxTierUnlocked'] ?? 1,
+      tierStats: tierStats,
+    );
+  }
 
   @override
-  List<Object?> get props => [correct, incorrect, avgResponseTimeMs, maxTierUnlocked];
+  List<Object?> get props => [correct, incorrect, avgResponseTimeMs, maxTierUnlocked, tierStats];
 }
 
 /// Perfil completo del jugador con persistencia
@@ -68,8 +130,8 @@ class PlayerProfile extends Equatable {
   final Map<OperationFamily, FamilyStats> familyStats;
   
   // Parámetros adaptativos
-  final double adaptiveSpeedFactor; // 0.5-2.0, multiplica velocidad base
-  final int adaptiveStartTier; // tier inicial sugerido
+  final double adaptiveSpeedFactor;
+  final int adaptiveStartTier;
 
   const PlayerProfile({
     required this.id,
@@ -91,6 +153,19 @@ class PlayerProfile extends Equatable {
   double get globalAccuracy => (totalCorrect + totalIncorrect) > 0
     ? totalCorrect / (totalCorrect + totalIncorrect)
     : 0.0;
+
+  /// Obtiene el tier sugerido para una familia específica
+  int getTierForFamily(OperationFamily family) {
+    final stats = familyStats[family];
+    if (stats == null) return 1;
+    return stats.maxTierUnlocked.clamp(1, 5);
+  }
+
+  /// Obtiene precisión para una familia específica
+  double getAccuracyForFamily(OperationFamily family) {
+    final stats = familyStats[family];
+    return stats?.accuracy ?? 0.0;
+  }
 
   PlayerProfile copyWith({
     String? id,

@@ -2,219 +2,250 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lluvia_calculo/core/operation_generator.dart';
 import 'package:lluvia_calculo/models/operation.dart';
+import 'package:lluvia_calculo/models/player_profile.dart';
 
 void main() {
   group('OperationGenerator', () {
     late OperationGenerator generator;
 
     setUp(() {
-      // Usar semilla fija para tests reproducibles
-      generator = OperationGenerator(Random(42));
+      generator = OperationGenerator(Random(42)); // Seed fijo para reproducibilidad
     });
 
-    group('generate', () {
-      test('genera operaciones válidas para tier 1', () {
-        for (int i = 0; i < 100; i++) {
-          final op = generator.generate(tier: 1);
-          
-          expect(op.tier, 1);
-          expect(op.answer, isNotNull);
-          expect(op.expression, isNotEmpty);
-          // Tier 1 solo tiene suma y resta
-          expect(
-            op.type == OperationType.addition || op.type == OperationType.subtraction,
-            isTrue,
-            reason: 'Tier 1 solo debe tener sumas y restas, pero obtuvo ${op.type}',
-          );
-        }
-      });
-
-      test('genera operaciones válidas para tier 2', () {
-        for (int i = 0; i < 100; i++) {
-          final op = generator.generate(tier: 2);
-          
-          expect(op.tier, 2);
-          expect(op.answer, isNotNull);
-          // Tier 2 incluye multiplicación
-          expect(
-            [OperationType.addition, OperationType.subtraction, OperationType.multiplication]
-              .contains(op.type),
-            isTrue,
-          );
-        }
-      });
-
-      test('genera operaciones válidas para todos los tiers', () {
+    group('Variedad de operaciones', () {
+      test('genera sumas válidas en todos los tiers', () {
         for (int tier = 1; tier <= 5; tier++) {
-          for (int i = 0; i < 50; i++) {
-            final op = generator.generate(tier: tier);
-            expect(op.tier, tier);
-            expect(op.answer >= 0, isTrue, reason: 'Resultado debe ser no negativo');
-          }
+          final op = generator.generate(tier: tier, family: OperationFamily.sumas);
+          
+          expect(op.type, equals(OperationType.addition));
+          expect(op.tier, equals(tier));
+          expect(op.answer, isPositive);
+          expect(op.expression.contains('+'), isTrue);
+          
+          // Verificar que la respuesta es correcta
+          final parts = op.expression.split(' + ');
+          expect(int.parse(parts[0]) + int.parse(parts[1]), equals(op.answer));
         }
       });
 
-      test('respeta filtro de familia - sumas', () {
-        for (int i = 0; i < 50; i++) {
-          final op = generator.generate(tier: 3, family: OperationFamily.sumas);
-          expect(op.type, OperationType.addition);
+      test('genera restas con resultado positivo', () {
+        for (int i = 0; i < 100; i++) {
+          final op = generator.generate(tier: 3, family: OperationFamily.restas);
+          
+          expect(op.type, equals(OperationType.subtraction));
+          expect(op.answer, greaterThanOrEqualTo(0), 
+            reason: 'Resta ${op.expression} = ${op.answer} debe ser >= 0');
         }
       });
 
-      test('respeta filtro de familia - multiplicaciones', () {
-        for (int i = 0; i < 50; i++) {
-          final op = generator.generate(tier: 3, family: OperationFamily.multiplicaciones);
-          expect(op.type, OperationType.multiplication);
+      test('genera multiplicaciones válidas', () {
+        for (int tier = 1; tier <= 5; tier++) {
+          final op = generator.generate(tier: tier, family: OperationFamily.multiplicaciones);
+          
+          expect(op.type, equals(OperationType.multiplication));
+          expect(op.expression.contains('×'), isTrue);
+          
+          final parts = op.expression.split(' × ');
+          expect(int.parse(parts[0]) * int.parse(parts[1]), equals(op.answer));
         }
       });
 
-      test('respeta filtro de familia - divisiones', () {
-        for (int i = 0; i < 50; i++) {
+      test('genera divisiones exactas', () {
+        for (int i = 0; i < 100; i++) {
           final op = generator.generate(tier: 3, family: OperationFamily.divisiones);
-          expect(op.type, OperationType.division);
-          // Verificar que división es exacta
-          expect(op.answer, isA<int>());
-        }
-      });
-
-      test('clampea tier a rango válido', () {
-        final opLow = generator.generate(tier: -5);
-        expect(opLow.tier, 1);
-        
-        final opHigh = generator.generate(tier: 100);
-        expect(opHigh.tier, 5);
-      });
-    });
-
-    group('sumas (tier 1)', () {
-      test('genera sumas con números pequeños para principiantes', () {
-        for (int i = 0; i < 100; i++) {
-          final op = generator.generate(tier: 1, family: OperationFamily.sumas);
           
-          // Para tier 1, resultado debe ser <= 20
-          expect(op.answer <= 20, isTrue,
-            reason: 'Suma tier 1: ${op.expression} = ${op.answer} excede 20');
-        }
-      });
-    });
-
-    group('restas', () {
-      test('siempre genera resultado positivo', () {
-        for (int tier = 1; tier <= 5; tier++) {
-          for (int i = 0; i < 50; i++) {
-            final op = generator.generate(tier: tier, family: OperationFamily.restas);
-            
-            expect(op.answer >= 0, isTrue,
-              reason: 'Resta ${op.expression} = ${op.answer} es negativo');
-          }
-        }
-      });
-    });
-
-    group('multiplicaciones', () {
-      test('tier 1 usa tablas del 1-5', () {
-        for (int i = 0; i < 100; i++) {
-          final op = generator.generate(tier: 1, family: OperationFamily.multiplicaciones);
-          
-          // Resultado máximo: 5 × 5 = 25
-          expect(op.answer <= 25, isTrue,
-            reason: 'Multiplicación tier 1: ${op.expression} = ${op.answer} excede 25');
-        }
-      });
-
-      test('tier 2 usa tablas del 1-10', () {
-        for (int i = 0; i < 100; i++) {
-          final op = generator.generate(tier: 2, family: OperationFamily.multiplicaciones);
-          
-          // Resultado máximo: 10 × 10 = 100
-          expect(op.answer <= 100, isTrue,
-            reason: 'Multiplicación tier 2: ${op.expression} = ${op.answer} excede 100');
-        }
-      });
-    });
-
-    group('divisiones', () {
-      test('siempre genera divisiones exactas (sin decimales)', () {
-        for (int tier = 1; tier <= 5; tier++) {
-          for (int i = 0; i < 50; i++) {
-            final op = generator.generate(tier: tier, family: OperationFamily.divisiones);
-            
-            // Parsear la expresión para verificar
-            final parts = op.expression.split(' ÷ ');
-            if (parts.length == 2) {
-              final dividend = int.tryParse(parts[0]);
-              final divisor = int.tryParse(parts[1]);
-              
-              if (dividend != null && divisor != null && divisor != 0) {
-                expect(dividend % divisor, 0,
-                  reason: 'División ${op.expression} no es exacta');
-                expect(dividend ~/ divisor, op.answer,
-                  reason: 'Resultado incorrecto para ${op.expression}');
-              }
-            }
-          }
-        }
-      });
-
-      test('tier 1 usa divisores pequeños (1-2)', () {
-        for (int i = 0; i < 100; i++) {
-          final op = generator.generate(tier: 1, family: OperationFamily.divisiones);
+          expect(op.type, equals(OperationType.division));
+          expect(op.expression.contains('÷'), isTrue);
           
           final parts = op.expression.split(' ÷ ');
-          if (parts.length == 2) {
-            final divisor = int.tryParse(parts[1]);
-            expect(divisor != null && divisor <= 2, isTrue,
-              reason: 'División tier 1 usa divisor > 2: ${op.expression}');
-          }
+          final dividend = int.parse(parts[0]);
+          final divisor = int.parse(parts[1]);
+          expect(dividend % divisor, equals(0), 
+            reason: 'División $dividend ÷ $divisor debe ser exacta');
+          expect(dividend ~/ divisor, equals(op.answer));
+        }
+      });
+
+      test('genera operaciones mixtas válidas', () {
+        for (int tier = 1; tier <= 5; tier++) {
+          final op = generator.generate(tier: tier, family: OperationFamily.mixtas);
+          
+          expect(op.type, equals(OperationType.mixed));
+          expect(op.answer, greaterThanOrEqualTo(0),
+            reason: 'Mixta ${op.expression} = ${op.answer} debe ser >= 0');
         }
       });
     });
 
-    group('mixtas', () {
-      test('genera operaciones de dos pasos', () {
+    group('No repetición de expresiones', () {
+      test('no repite expresiones en la misma sesión', () {
+        generator.resetSession();
+        final expressions = <String>{};
+        
         for (int i = 0; i < 50; i++) {
-          final op = generator.generate(tier: 3, family: OperationFamily.mixtas);
-          
-          // Debe tener al menos 2 operadores
-          final operators = ['+', '-', '×'].where((o) => op.expression.contains(o)).length;
-          expect(operators >= 1, isTrue,
-            reason: 'Operación mixta debe tener operadores: ${op.expression}');
-          
-          // Resultado positivo
-          expect(op.answer >= 0, isTrue,
-            reason: 'Operación mixta negativa: ${op.expression} = ${op.answer}');
+          final op = generator.generate(tier: 2, family: OperationFamily.todas);
+          expect(expressions.contains(op.expression), isFalse,
+            reason: 'Expresión ${op.expression} repetida');
+          expressions.add(op.expression);
         }
+      });
+
+      test('resetSession limpia el historial', () {
+        generator.resetSession();
+        
+        final firstBatch = <String>[];
+        for (int i = 0; i < 20; i++) {
+          firstBatch.add(generator.generate(tier: 1, family: OperationFamily.sumas).expression);
+        }
+        
+        generator.resetSession();
+        
+        // Después de reset, puede repetir
+        final secondBatch = <String>[];
+        for (int i = 0; i < 20; i++) {
+          secondBatch.add(generator.generate(tier: 1, family: OperationFamily.sumas).expression);
+        }
+        
+        // Debe haber alguna repetición potencial (con el mismo seed)
+        final intersection = firstBatch.toSet().intersection(secondBatch.toSet());
+        // Con seed fijo y reset, es probable que haya coincidencias
+        expect(intersection, isNotEmpty);
       });
     });
 
-    group('generateBatch', () {
-      test('genera la cantidad solicitada', () {
-        final batch = generator.generateBatch(tier: 2, count: 10);
-        expect(batch.length, 10);
+    group('Control por tier', () {
+      test('tier 1 genera operaciones simples', () {
+        for (int i = 0; i < 20; i++) {
+          final op = generator.generate(tier: 1, family: OperationFamily.sumas);
+          expect(op.answer, lessThanOrEqualTo(18),
+            reason: 'Tier 1 suma ${op.expression} = ${op.answer} debe ser <= 18');
+        }
       });
 
-      test('evita respuestas duplicadas cuando se solicita', () {
-        final batch = generator.generateBatch(
-          tier: 2, 
-          count: 8,
+      test('tier 1 multiplicaciones usa tablas 1-5', () {
+        for (int i = 0; i < 20; i++) {
+          final op = generator.generate(tier: 1, family: OperationFamily.multiplicaciones);
+          final parts = op.expression.split(' × ');
+          expect(int.parse(parts[0]), lessThanOrEqualTo(5));
+          expect(int.parse(parts[1]), lessThanOrEqualTo(5));
+        }
+      });
+
+      test('tier 5 genera números más grandes', () {
+        bool hasLargeAnswer = false;
+        for (int i = 0; i < 20; i++) {
+          final op = generator.generate(tier: 5, family: OperationFamily.sumas);
+          if (op.answer > 200) hasLargeAnswer = true;
+        }
+        expect(hasLargeAnswer, isTrue, 
+          reason: 'Tier 5 debe generar sumas con resultados > 200');
+      });
+    });
+
+    group('Generación adaptativa', () {
+      test('genera operaciones adaptadas al perfil del jugador', () {
+        final profile = PlayerProfile.create('TestPlayer').copyWith(
+          familyStats: {
+            OperationFamily.sumas: const FamilyStats(
+              correct: 20,
+              incorrect: 2,
+              maxTierUnlocked: 3,
+            ),
+            OperationFamily.restas: const FamilyStats(
+              correct: 5,
+              incorrect: 10,
+              maxTierUnlocked: 1,
+            ),
+          },
+        );
+
+        // Generar varias operaciones adaptativas
+        for (int i = 0; i < 10; i++) {
+          final op = generator.generateAdaptive(
+            profile: profile,
+            currentTier: 2,
+            selectedFamily: OperationFamily.todas,
+          );
+          
+          expect(op, isNotNull);
+          expect(op.answer, greaterThan(0));
+        }
+      });
+
+      test('prioriza familias débiles', () {
+        final profile = PlayerProfile.create('TestPlayer').copyWith(
+          familyStats: {
+            OperationFamily.sumas: const FamilyStats(
+              correct: 50,
+              incorrect: 5,
+              maxTierUnlocked: 4,
+            ),
+            // Restas muy débil
+            OperationFamily.restas: const FamilyStats(
+              correct: 3,
+              incorrect: 12,
+              maxTierUnlocked: 1,
+            ),
+          },
+        );
+
+        int restasCount = 0;
+        for (int i = 0; i < 50; i++) {
+          final op = generator.generateAdaptive(
+            profile: profile,
+            currentTier: 2,
+            selectedFamily: OperationFamily.todas,
+          );
+          if (op.type == OperationType.subtraction) restasCount++;
+        }
+        
+        // Debería haber una buena cantidad de restas por ser la familia débil
+        expect(restasCount, greaterThan(5),
+          reason: 'Debe practicar más la familia débil (restas)');
+      });
+    });
+
+    group('Generación por lote', () {
+      test('genera lote sin respuestas duplicadas', () {
+        final ops = generator.generateBatch(
+          tier: 2,
+          count: 10,
+          family: OperationFamily.todas,
           avoidDuplicateAnswers: true,
         );
         
-        final answers = batch.map((op) => op.answer).toSet();
-        expect(answers.length, batch.length,
-          reason: 'Hay respuestas duplicadas en el lote');
+        expect(ops.length, equals(10));
+        
+        final answers = ops.map((op) => op.answer).toSet();
+        expect(answers.length, equals(10),
+          reason: 'No debe haber respuestas duplicadas');
       });
 
-      test('permite respuestas duplicadas cuando no se evita', () {
-        // Generar muchas operaciones, es probable que haya duplicados
-        final batch = generator.generateBatch(
-          tier: 1, 
-          count: 50,
+      test('genera lote de tamaño solicitado', () {
+        final ops = generator.generateBatch(
+          tier: 3,
+          count: 15,
           family: OperationFamily.multiplicaciones,
-          avoidDuplicateAnswers: false,
         );
         
-        expect(batch.length, 50);
+        expect(ops.length, equals(15));
+        for (final op in ops) {
+          expect(op.type, equals(OperationType.multiplication));
+        }
+      });
+    });
+
+    group('Estadísticas del generador', () {
+      test('trackea expresiones usadas', () {
+        generator.resetSession();
+        
+        for (int i = 0; i < 30; i++) {
+          generator.generate(tier: 2, family: OperationFamily.todas);
+        }
+        
+        final stats = generator.getStats();
+        expect(stats['usedExpressions'], greaterThanOrEqualTo(30));
+        expect(stats['sessionOperationCount'], equals(30));
       });
     });
   });

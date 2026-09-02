@@ -58,6 +58,8 @@ class GameProvider extends ChangeNotifier {
   String get inputBuffer => _inputBuffer;
   bool get hasPlayer => _currentProfile != null;
   MultiplayerService get multiplayer => _multiplayer;
+  AudioService get audio => _audio;
+  OperationGenerator get generator => _generator;
 
   /// Inicializa el provider cargando datos guardados
   Future<void> initialize() async {
