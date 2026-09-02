@@ -7,6 +7,7 @@ import '../providers/game_provider.dart';
 import '../services/multiplayer_service.dart';
 
 /// Pantalla de lobby multijugador 1v1
+/// Va DIRECTO a crear/unirse, sin pantalla de "conectar"
 class MultiplayerScreen extends StatefulWidget {
   const MultiplayerScreen({super.key});
 
@@ -16,7 +17,6 @@ class MultiplayerScreen extends StatefulWidget {
 
 class _MultiplayerScreenState extends State<MultiplayerScreen> {
   final _codeController = TextEditingController();
-  bool _isConnecting = false;
   bool _isCreating = false;
   bool _isJoining = false;
   String? _errorMessage;
@@ -45,7 +45,6 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
       if (mounted) setState(() {});
       
       if (state == MultiplayerConnectionState.playing) {
-        // Iniciar partida
         Navigator.of(context).pushReplacementNamed('/multiplayer-game');
       }
     });
@@ -65,27 +64,9 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
     });
   }
 
-  Future<void> _connect() async {
-    final provider = context.read<GameProvider>();
-    if (provider.currentProfile == null) return;
-    
-    setState(() {
-      _isConnecting = true;
-      _errorMessage = null;
-    });
-    
-    final success = await provider.multiplayer.connect(provider.currentProfile!.name);
-    
-    if (mounted) {
-      setState(() => _isConnecting = false);
-      if (!success) {
-        setState(() => _errorMessage = 'No se pudo conectar al servidor');
-      }
-    }
-  }
-
   Future<void> _createRoom() async {
-    final mp = context.read<GameProvider>().multiplayer;
+    final provider = context.read<GameProvider>();
+    final mp = provider.multiplayer;
     
     setState(() {
       _isCreating = true;
@@ -97,14 +78,14 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
     if (mounted) {
       setState(() => _isCreating = false);
       if (room == null) {
-        setState(() => _errorMessage = 'No se pudo crear la sala');
+        setState(() => _errorMessage = mp.errorMessage ?? 'No se pudo crear la sala. Verifica tu conexión.');
       }
     }
   }
 
   Future<void> _joinRoom() async {
     final code = _codeController.text.trim().toUpperCase();
-    if (code.length < 4) {
+    if (code.isEmpty) {
       setState(() => _errorMessage = 'Introduce el código de la sala');
       return;
     }
@@ -120,8 +101,8 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
     
     if (mounted) {
       setState(() => _isJoining = false);
-      if (room == null && _errorMessage == null) {
-        setState(() => _errorMessage = 'No se pudo unir a la sala');
+      if (room == null) {
+        setState(() => _errorMessage = mp.errorMessage ?? 'No se pudo unir a la sala. Verifica el código.');
       }
     }
   }
@@ -130,6 +111,7 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
     final mp = context.read<GameProvider>().multiplayer;
     final currentPlayer = mp.currentRoom?.players[mp.playerId];
     await mp.setReady(!(currentPlayer?.isReady ?? false));
+    if (mounted) setState(() {});
   }
 
   Future<void> _startGame() async {
@@ -146,7 +128,6 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
   @override
   Widget build(BuildContext context) {
     final mp = context.watch<GameProvider>().multiplayer;
-    final state = mp.connectionState;
     final room = mp.currentRoom;
     
     return Scaffold(
@@ -166,82 +147,16 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(20),
-            child: _buildContent(state, room, mp),
+            child: room != null 
+              ? _buildRoomView(room, mp)
+              : _buildLobbyView(),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildContent(MultiplayerConnectionState state, GameRoom? room, MultiplayerService mp) {
-    // Desconectado: botón para conectar
-    if (state == MultiplayerConnectionState.disconnected) {
-      return _buildDisconnectedView();
-    }
-    
-    // Conectando
-    if (state == MultiplayerConnectionState.connecting || _isConnecting) {
-      return _buildLoadingView('Conectando...');
-    }
-    
-    // Conectado pero sin sala
-    if (state == MultiplayerConnectionState.connected && room == null) {
-      return _buildLobbyView();
-    }
-    
-    // En sala esperando
-    if (room != null) {
-      return _buildRoomView(room, mp);
-    }
-    
-    // Error
-    if (state == MultiplayerConnectionState.error) {
-      return _buildErrorView();
-    }
-    
-    return _buildLoadingView('Cargando...');
-  }
-
-  Widget _buildDisconnectedView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.wifi_off, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
-          const Text(
-            'Desconectado',
-            style: TextStyle(color: Colors.white70, fontSize: 18),
-          ),
-          const SizedBox(height: 24),
-          _buildButton(
-            'Conectar',
-            Icons.wifi,
-            _connect,
-            isLoading: _isConnecting,
-          ),
-          if (_errorMessage != null) ...[
-            const SizedBox(height: 16),
-            Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoadingView(String message) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircularProgressIndicator(color: Colors.amber),
-          const SizedBox(height: 16),
-          Text(message, style: const TextStyle(color: Colors.white70)),
-        ],
-      ),
-    );
-  }
-
+  /// Lobby: crear o unirse - SIN pantalla de wifi
   Widget _buildLobbyView() {
     return SingleChildScrollView(
       child: Column(
@@ -272,7 +187,7 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
           ),
           const SizedBox(height: 16),
           
-          // O separador
+          // Separador
           Row(
             children: [
               Expanded(child: Divider(color: Colors.white24)),
@@ -300,15 +215,13 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 4,
+                    letterSpacing: 2,
                   ),
                   textAlign: TextAlign.center,
                   textCapitalization: TextCapitalization.characters,
-                  maxLength: 12,
                   decoration: InputDecoration(
-                    hintText: 'Código',
+                    hintText: 'Código de sala',
                     hintStyle: TextStyle(color: Colors.white24),
-                    counterText: '',
                     filled: true,
                     fillColor: Colors.white.withAlpha(20),
                     border: OutlineInputBorder(
@@ -317,8 +230,8 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
                     ),
                   ),
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z2-9]')),
-                    UpperCaseTextFormatter(),
+                    FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+                    _UpperCaseFormatter(),
                   ],
                 ),
               ),
@@ -333,10 +246,61 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
             ],
           ),
           
+          // Error message
           if (_errorMessage != null) ...[
             const SizedBox(height: 16),
-            Text(_errorMessage!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withAlpha(30),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withAlpha(100)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
+          
+          const SizedBox(height: 32),
+          
+          // Info
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.withAlpha(20),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue[300], size: 18),
+                    const SizedBox(width: 8),
+                    Text('Cómo funciona:', style: TextStyle(color: Colors.blue[300], fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '1. Uno crea sala y comparte el código\n'
+                  '2. El otro introduce el código y se une\n'
+                  '3. Ambos pulsan "Listo"\n'
+                  '4. El host inicia la partida',
+                  style: TextStyle(color: Colors.blue[200], fontSize: 13),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -369,9 +333,9 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
                     room.code,
                     style: const TextStyle(
                       color: Colors.amber,
-                      fontSize: 36,
+                      fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 8,
+                      letterSpacing: 4,
                     ),
                   ),
                   IconButton(
@@ -379,7 +343,7 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: room.code));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Código copiado')),
+                        const SnackBar(content: Text('Código copiado'), duration: Duration(seconds: 1)),
                       );
                     },
                   ),
@@ -399,32 +363,28 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
         const SizedBox(height: 12),
         
         // Yo
-        _PlayerCard(
-          player: myPlayer,
-          isMe: true,
-          isHost: isHost,
-        ),
+        _PlayerCard(player: myPlayer, isMe: true, isHost: isHost),
         const SizedBox(height: 8),
         
-        // Oponente
+        // Oponente o esperando
         if (opponent != null)
-          _PlayerCard(
-            player: opponent,
-            isMe: false,
-            isHost: room.hostId == opponent.id,
-          )
+          _PlayerCard(player: opponent, isMe: false, isHost: room.hostId == opponent.id)
         else
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white.withAlpha(10),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white24, style: BorderStyle.solid),
+              border: Border.all(color: Colors.white24),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const CircularProgressIndicator(strokeWidth: 2),
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54),
+                ),
                 const SizedBox(width: 12),
                 const Text('Esperando rival...', style: TextStyle(color: Colors.white54)),
               ],
@@ -433,48 +393,28 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
         
         const Spacer(),
         
-        // Botones de acción
+        // Error
+        if (_errorMessage != null) ...[
+          Text(_errorMessage!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+        ],
+        
+        // Acciones
         if (opponent != null) ...[
           _buildButton(
-            myPlayer?.isReady == true ? 'Cancelar Listo' : '¡Estoy Listo!',
+            myPlayer?.isReady == true ? 'Cancelar' : '¡Estoy Listo!',
             myPlayer?.isReady == true ? Icons.close : Icons.check_circle,
             _setReady,
             primary: myPlayer?.isReady != true,
           ),
           if (canStart) ...[
             const SizedBox(height: 12),
-            _buildButton(
-              '¡EMPEZAR!',
-              Icons.play_arrow,
-              _startGame,
-              primary: true,
-            ),
+            _buildButton('¡EMPEZAR!', Icons.play_arrow, _startGame, primary: true),
           ],
         ],
         const SizedBox(height: 12),
-        _buildButton(
-          'Salir de la sala',
-          Icons.exit_to_app,
-          _leaveRoom,
-          destructive: true,
-        ),
+        _buildButton('Salir', Icons.exit_to_app, _leaveRoom, destructive: true),
       ],
-    );
-  }
-
-  Widget _buildErrorView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error, size: 64, color: Colors.red),
-          const SizedBox(height: 16),
-          Text(_errorMessage ?? 'Error de conexión',
-            style: const TextStyle(color: Colors.white70)),
-          const SizedBox(height: 24),
-          _buildButton('Reintentar', Icons.refresh, _connect),
-        ],
-      ),
     );
   }
 
@@ -534,11 +474,7 @@ class _PlayerCard extends StatelessWidget {
   final bool isMe;
   final bool isHost;
 
-  const _PlayerCard({
-    required this.player,
-    required this.isMe,
-    required this.isHost,
-  });
+  const _PlayerCard({required this.player, required this.isMe, required this.isHost});
 
   @override
   Widget build(BuildContext context) {
@@ -556,37 +492,25 @@ class _PlayerCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            isHost ? Icons.star : Icons.person,
-            color: isHost ? Colors.amber : Colors.white54,
-          ),
+          Icon(isHost ? Icons.star : Icons.person, color: isHost ? Colors.amber : Colors.white54),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  player!.name + (isMe ? ' (Tú)' : ''),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  '${player!.name}${isMe ? ' (Tú)' : ''}',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
-                Text(
-                  isHost ? 'Anfitrión' : 'Invitado',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
+                Text(isHost ? 'Anfitrión' : 'Invitado', style: const TextStyle(color: Colors.white54, fontSize: 12)),
               ],
             ),
           ),
           if (player!.isReady)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.green,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Text('LISTO', style: TextStyle(color: Colors.white, fontSize: 12)),
+              decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(8)),
+              child: const Text('LISTO', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
             ),
         ],
       ),
@@ -594,15 +518,9 @@ class _PlayerCard extends StatelessWidget {
   }
 }
 
-class UpperCaseTextFormatter extends TextInputFormatter {
+class _UpperCaseFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    return TextEditingValue(
-      text: newValue.text.toUpperCase(),
-      selection: newValue.selection,
-    );
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    return TextEditingValue(text: newValue.text.toUpperCase(), selection: newValue.selection);
   }
 }

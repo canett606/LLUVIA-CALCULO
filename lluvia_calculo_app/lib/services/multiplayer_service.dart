@@ -204,12 +204,14 @@ abstract class MultiplayerService {
   void dispose();
 }
 
-/// Implementación con JSON storage service gratuito
-/// Usa jsonbin.io o similar como backend simple
-class SimpleMultiplayerService implements MultiplayerService {
-  // Usamos un servicio de JSON storage simple y gratuito
-  // jsonblob.com no requiere API key para uso básico
-  static const String _baseUrl = 'https://jsonblob.com/api/jsonBlob';
+/// Implementación con Firebase Realtime Database
+/// URL configurable - si no responde, falla con mensaje claro
+class FirebaseMultiplayerService implements MultiplayerService {
+  // URL de Firebase RTDB - configurar con proyecto real de Pablo
+  static const String _firebaseUrl = String.fromEnvironment(
+    'FIREBASE_RTDB_URL',
+    defaultValue: 'https://lluvia-calculo-default-rtdb.firebaseio.com',
+  );
   
   final _connectionStateController = StreamController<MultiplayerConnectionState>.broadcast();
   final _roomController = StreamController<GameRoom?>.broadcast();
@@ -220,9 +222,9 @@ class SimpleMultiplayerService implements MultiplayerService {
   String? _playerId;
   String? _playerName;
   RoomRole? _role;
-  String? _blobId;
   Timer? _pollingTimer;
   String? _errorMessage;
+  bool _backendAvailable = false;
 
   @override
   MultiplayerConnectionState get connectionState => _state;
@@ -269,25 +271,23 @@ class SimpleMultiplayerService implements MultiplayerService {
 
   @override
   Future<bool> connect(String playerName) async {
-    _setState(MultiplayerConnectionState.connecting);
+    _playerId = 'p_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
+    _playerName = playerName;
     _errorMessage = null;
     
+    // Verificar si Firebase está disponible
     try {
-      // Verificar conectividad
       final response = await http.get(
-        Uri.parse('https://jsonblob.com/api/jsonBlob'),
+        Uri.parse('$_firebaseUrl/.json?shallow=true'),
       ).timeout(const Duration(seconds: 5));
       
-      // jsonblob devuelve 404 para GET sin blob id, lo cual es esperado
-      _playerId = 'p_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
-      _playerName = playerName;
-      _setState(MultiplayerConnectionState.connected);
-      return true;
+      _backendAvailable = response.statusCode == 200;
     } catch (e) {
-      _errorMessage = 'No se pudo conectar al servidor';
-      _setState(MultiplayerConnectionState.error);
-      return false;
+      _backendAvailable = false;
     }
+    
+    _setState(MultiplayerConnectionState.connected);
+    return true;
   }
 
   @override
@@ -297,14 +297,42 @@ class SimpleMultiplayerService implements MultiplayerService {
     _playerId = null;
     _playerName = null;
     _role = null;
-    _blobId = null;
     _updateRoom(null);
     _setState(MultiplayerConnectionState.disconnected);
   }
 
   @override
   Future<GameRoom?> createRoom() async {
-    if (_playerId == null || _playerName == null) return null;
+    // Asegurar que tenemos playerId
+    if (_playerId == null || _playerName == null) {
+      final provider = _playerName ?? 'Jugador';
+      await connect(provider);
+    }
+    
+    _errorMessage = null;
+    
+    // Verificar backend
+    if (!_backendAvailable) {
+      try {
+        final response = await http.get(
+          Uri.parse('$_firebaseUrl/.json?shallow=true'),
+        ).timeout(const Duration(seconds: 5));
+        _backendAvailable = response.statusCode == 200;
+      } catch (e) {
+        _backendAvailable = false;
+      }
+    }
+    
+    if (!_backendAvailable) {
+      _errorMessage = 'No se pudo crear la sala. El servidor no está disponible.';
+      _eventController.add(MultiplayerEvent(
+        type: 'error',
+        senderId: 'system',
+        data: {'message': _errorMessage},
+        timestamp: DateTime.now(),
+      ));
+      return null;
+    }
     
     final code = _generateRoomCode();
     final seed = Random().nextInt(1000000);
@@ -325,128 +353,120 @@ class SimpleMultiplayerService implements MultiplayerService {
     );
     
     try {
-      // Crear blob con la sala
-      final response = await http.post(
-        Uri.parse(_baseUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'room': room.toJson(),
-          'code': code,
-          'createdAt': DateTime.now().toIso8601String(),
-        }),
-      );
+      final response = await http.put(
+        Uri.parse('$_firebaseUrl/rooms/$code.json'),
+        body: jsonEncode(room.toJson()),
+      ).timeout(const Duration(seconds: 10));
       
-      if (response.statusCode == 201) {
-        // El blob ID viene en el header Location
-        final location = response.headers['location'];
-        if (location != null) {
-          _blobId = location.split('/').last;
-        }
-        
+      if (response.statusCode == 200) {
         _role = RoomRole.host;
         _updateRoom(room);
         _setState(MultiplayerConnectionState.waitingForOpponent);
-        _startPolling();
+        _startPolling(code);
         return room;
+      } else {
+        _errorMessage = 'No se pudo crear la sala. Inténtalo de nuevo.';
       }
     } catch (e) {
-      _errorMessage = 'Error al crear sala: $e';
+      _errorMessage = 'No se pudo crear la sala. Verifica tu conexión.';
     }
     
+    _eventController.add(MultiplayerEvent(
+      type: 'error',
+      senderId: 'system',
+      data: {'message': _errorMessage},
+      timestamp: DateTime.now(),
+    ));
     return null;
   }
 
   @override
   Future<GameRoom?> joinRoom(String code) async {
-    if (_playerId == null || _playerName == null) return null;
-    
-    final upperCode = code.toUpperCase().trim();
-    _errorMessage = null;
-    
-    // Para unirse necesitamos encontrar el blob con ese código
-    // Como jsonblob no tiene búsqueda, el código ES el blobId
-    // Modificamos createRoom para usar el código como identificador
-    
-    _eventController.add(MultiplayerEvent(
-      type: 'info',
-      senderId: 'system',
-      data: {'message': 'El modo 1v1 requiere que ambos jugadores usen el mismo código de sala.'},
-      timestamp: DateTime.now(),
-    ));
-    
-    // Intentar obtener la sala directamente usando el código como blob ID
-    try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/$upperCode'),
-        headers: {'Accept': 'application/json'},
-      );
-      
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final roomData = data['room'] as Map<String, dynamic>?;
-        
-        if (roomData != null) {
-          var room = GameRoom.fromJson(roomData);
-          
-          if (room.isFull) {
-            _errorMessage = 'Sala llena';
-            _eventController.add(MultiplayerEvent(
-              type: 'error',
-              senderId: 'system',
-              data: {'message': 'Sala llena'},
-              timestamp: DateTime.now(),
-            ));
-            return null;
-          }
-          
-          // Añadir jugador
-          final newPlayers = Map<String, RoomPlayer>.from(room.players);
-          newPlayers[_playerId!] = RoomPlayer(
-            id: _playerId!,
-            name: _playerName!,
-            isReady: false,
-            lastUpdateMs: DateTime.now().millisecondsSinceEpoch,
-          );
-          
-          room = room.copyWith(players: newPlayers);
-          
-          // Actualizar blob
-          await http.put(
-            Uri.parse('$_baseUrl/$upperCode'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: jsonEncode({
-              'room': room.toJson(),
-              'code': upperCode,
-              'updatedAt': DateTime.now().toIso8601String(),
-            }),
-          );
-          
-          _blobId = upperCode;
-          _role = RoomRole.guest;
-          _updateRoom(room);
-          _setState(MultiplayerConnectionState.inRoom);
-          _startPolling();
-          return room;
-        }
-      }
-      
-      _errorMessage = 'Sala no encontrada. Verifica el código.';
-      _eventController.add(MultiplayerEvent(
-        type: 'error',
-        senderId: 'system',
-        data: {'message': 'Sala no encontrada'},
-        timestamp: DateTime.now(),
-      ));
-    } catch (e) {
-      _errorMessage = 'Error de conexión';
+    // Asegurar que tenemos playerId
+    if (_playerId == null || _playerName == null) {
+      final provider = _playerName ?? 'Jugador';
+      await connect(provider);
     }
     
+    _errorMessage = null;
+    final upperCode = code.toUpperCase().trim();
+    
+    try {
+      final response = await http.get(
+        Uri.parse('$_firebaseUrl/rooms/$upperCode.json'),
+      ).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode != 200 || response.body == 'null') {
+        _errorMessage = 'Sala no encontrada. Verifica el código.';
+        _eventController.add(MultiplayerEvent(
+          type: 'error',
+          senderId: 'system',
+          data: {'message': _errorMessage},
+          timestamp: DateTime.now(),
+        ));
+        return null;
+      }
+      
+      final roomData = jsonDecode(response.body) as Map<String, dynamic>;
+      var room = GameRoom.fromJson(roomData);
+      
+      if (room.isFull) {
+        _errorMessage = 'La sala está llena.';
+        _eventController.add(MultiplayerEvent(
+          type: 'error',
+          senderId: 'system',
+          data: {'message': _errorMessage},
+          timestamp: DateTime.now(),
+        ));
+        return null;
+      }
+      
+      if (room.isStarted) {
+        _errorMessage = 'La partida ya comenzó.';
+        _eventController.add(MultiplayerEvent(
+          type: 'error',
+          senderId: 'system',
+          data: {'message': _errorMessage},
+          timestamp: DateTime.now(),
+        ));
+        return null;
+      }
+      
+      // Añadir jugador
+      final newPlayers = Map<String, RoomPlayer>.from(room.players);
+      newPlayers[_playerId!] = RoomPlayer(
+        id: _playerId!,
+        name: _playerName!,
+        isReady: false,
+        lastUpdateMs: DateTime.now().millisecondsSinceEpoch,
+      );
+      
+      room = room.copyWith(players: newPlayers);
+      
+      final updateResponse = await http.put(
+        Uri.parse('$_firebaseUrl/rooms/$upperCode.json'),
+        body: jsonEncode(room.toJson()),
+      ).timeout(const Duration(seconds: 10));
+      
+      if (updateResponse.statusCode == 200) {
+        _role = RoomRole.guest;
+        _updateRoom(room);
+        _setState(MultiplayerConnectionState.inRoom);
+        _startPolling(upperCode);
+        return room;
+      } else {
+        _errorMessage = 'No se pudo unir a la sala. Inténtalo de nuevo.';
+      }
+    } catch (e) {
+      _errorMessage = 'No se pudo unir a la sala. Verifica tu conexión.';
+    }
+    
+    _eventController.add(MultiplayerEvent(
+      type: 'error',
+      senderId: 'system',
+      data: {'message': _errorMessage},
+      timestamp: DateTime.now(),
+    ));
     return null;
   }
 
@@ -454,83 +474,73 @@ class SimpleMultiplayerService implements MultiplayerService {
   Future<void> leaveRoom() async {
     _stopPolling();
     
-    if (_blobId != null && _role == RoomRole.host) {
+    if (_currentRoom != null) {
       try {
-        await http.delete(Uri.parse('$_baseUrl/$_blobId'));
+        if (_role == RoomRole.host) {
+          await http.delete(
+            Uri.parse('$_firebaseUrl/rooms/${_currentRoom!.code}.json'),
+          ).timeout(const Duration(seconds: 5));
+        } else if (_playerId != null) {
+          await http.delete(
+            Uri.parse('$_firebaseUrl/rooms/${_currentRoom!.code}/players/$_playerId.json'),
+          ).timeout(const Duration(seconds: 5));
+        }
       } catch (_) {}
     }
     
     _role = null;
-    _blobId = null;
     _updateRoom(null);
     _setState(MultiplayerConnectionState.connected);
   }
 
   @override
   Future<void> setReady(bool ready) async {
-    if (_currentRoom == null || _playerId == null || _blobId == null) return;
+    if (_currentRoom == null || _playerId == null) return;
     
     try {
+      await http.patch(
+        Uri.parse('$_firebaseUrl/rooms/${_currentRoom!.code}/players/$_playerId.json'),
+        body: jsonEncode({
+          'isReady': ready,
+          'lastUpdateMs': DateTime.now().millisecondsSinceEpoch,
+        }),
+      ).timeout(const Duration(seconds: 5));
+      
       final updatedPlayers = Map<String, RoomPlayer>.from(_currentRoom!.players);
       if (updatedPlayers.containsKey(_playerId)) {
-        updatedPlayers[_playerId!] = updatedPlayers[_playerId!]!.copyWith(
-          isReady: ready,
-          lastUpdateMs: DateTime.now().millisecondsSinceEpoch,
-        );
+        updatedPlayers[_playerId!] = updatedPlayers[_playerId!]!.copyWith(isReady: ready);
       }
-      
-      final updatedRoom = _currentRoom!.copyWith(players: updatedPlayers);
-      
-      await http.put(
-        Uri.parse('$_baseUrl/$_blobId'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'room': updatedRoom.toJson(),
-          'code': _currentRoom!.code,
-          'updatedAt': DateTime.now().toIso8601String(),
-        }),
-      );
-      
-      _updateRoom(updatedRoom);
+      _updateRoom(_currentRoom!.copyWith(players: updatedPlayers));
       
       if (ready) {
         _setState(MultiplayerConnectionState.ready);
       }
-    } catch (e) {
-      // Silently fail
-    }
+    } catch (_) {}
   }
 
   @override
   Future<void> startGame() async {
-    if (_currentRoom == null || _role != RoomRole.host || _blobId == null) return;
+    if (_currentRoom == null || _role != RoomRole.host) return;
     if (!_currentRoom!.allReady || _currentRoom!.players.length < 2) return;
     
     try {
       final startTime = DateTime.now().millisecondsSinceEpoch;
-      final updatedRoom = _currentRoom!.copyWith(
+      
+      await http.patch(
+        Uri.parse('$_firebaseUrl/rooms/${_currentRoom!.code}.json'),
+        body: jsonEncode({
+          'isStarted': true,
+          'startedAtMs': startTime,
+          'status': 'playing',
+        }),
+      ).timeout(const Duration(seconds: 5));
+      
+      _updateRoom(_currentRoom!.copyWith(
         isStarted: true,
         startedAtMs: startTime,
         status: 'playing',
-      );
+      ));
       
-      await http.put(
-        Uri.parse('$_baseUrl/$_blobId'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'room': updatedRoom.toJson(),
-          'code': _currentRoom!.code,
-          'updatedAt': DateTime.now().toIso8601String(),
-        }),
-      );
-      
-      _updateRoom(updatedRoom);
       _setState(MultiplayerConnectionState.playing);
       
       _eventController.add(MultiplayerEvent(
@@ -539,9 +549,7 @@ class SimpleMultiplayerService implements MultiplayerService {
         data: {'seed': _currentRoom!.gameSeed, 'startedAtMs': startTime},
         timestamp: DateTime.now(),
       ));
-    } catch (e) {
-      // Silently fail
-    }
+    } catch (_) {}
   }
 
   @override
@@ -551,39 +559,20 @@ class SimpleMultiplayerService implements MultiplayerService {
     required int correctAnswers,
     bool isFinished = false,
   }) async {
-    if (_currentRoom == null || _playerId == null || _blobId == null) return;
+    if (_currentRoom == null || _playerId == null) return;
     
     try {
-      final updatedPlayers = Map<String, RoomPlayer>.from(_currentRoom!.players);
-      if (updatedPlayers.containsKey(_playerId)) {
-        updatedPlayers[_playerId!] = updatedPlayers[_playerId!]!.copyWith(
-          score: score,
-          lives: lives,
-          correctAnswers: correctAnswers,
-          isFinished: isFinished,
-          lastUpdateMs: DateTime.now().millisecondsSinceEpoch,
-        );
-      }
-      
-      final updatedRoom = _currentRoom!.copyWith(players: updatedPlayers);
-      
-      await http.put(
-        Uri.parse('$_baseUrl/$_blobId'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+      await http.patch(
+        Uri.parse('$_firebaseUrl/rooms/${_currentRoom!.code}/players/$_playerId.json'),
         body: jsonEncode({
-          'room': updatedRoom.toJson(),
-          'code': _currentRoom!.code,
-          'updatedAt': DateTime.now().toIso8601String(),
+          'score': score,
+          'lives': lives,
+          'correctAnswers': correctAnswers,
+          'isFinished': isFinished,
+          'lastUpdateMs': DateTime.now().millisecondsSinceEpoch,
         }),
-      );
-      
-      _updateRoom(updatedRoom);
-    } catch (e) {
-      // Silently fail
-    }
+      ).timeout(const Duration(seconds: 3));
+    } catch (_) {}
   }
 
   @override
@@ -605,10 +594,10 @@ class SimpleMultiplayerService implements MultiplayerService {
     ));
   }
 
-  void _startPolling() {
+  void _startPolling(String roomCode) {
     _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(const Duration(milliseconds: 800), (_) async {
-      await _pollRoom();
+    _pollingTimer = Timer.periodic(const Duration(milliseconds: 600), (_) async {
+      await _pollRoom(roomCode);
     });
   }
 
@@ -617,19 +606,15 @@ class SimpleMultiplayerService implements MultiplayerService {
     _pollingTimer = null;
   }
 
-  Future<void> _pollRoom() async {
-    if (_blobId == null) return;
-    
+  Future<void> _pollRoom(String roomCode) async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/$_blobId'),
-        headers: {'Accept': 'application/json'},
-      );
+        Uri.parse('$_firebaseUrl/rooms/$roomCode.json'),
+      ).timeout(const Duration(seconds: 5));
       
-      if (response.statusCode == 404) {
+      if (response.statusCode != 200 || response.body == 'null') {
         _stopPolling();
         _role = null;
-        _blobId = null;
         _updateRoom(null);
         _setState(MultiplayerConnectionState.connected);
         _eventController.add(MultiplayerEvent(
@@ -641,64 +626,53 @@ class SimpleMultiplayerService implements MultiplayerService {
         return;
       }
       
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final roomData = data['room'] as Map<String, dynamic>?;
-        
-        if (roomData != null) {
-          final newRoom = GameRoom.fromJson(roomData);
-          final oldRoom = _currentRoom;
-          _updateRoom(newRoom);
-          
-          // Detectar cambios
-          if (newRoom.isStarted && _state != MultiplayerConnectionState.playing) {
-            _setState(MultiplayerConnectionState.playing);
-            _eventController.add(MultiplayerEvent(
-              type: 'game_started',
-              senderId: newRoom.hostId,
-              data: {'seed': newRoom.gameSeed, 'startedAtMs': newRoom.startedAtMs},
-              timestamp: DateTime.now(),
-            ));
-          }
-          
-          if (oldRoom != null && newRoom.players.length > oldRoom.players.length) {
-            _setState(MultiplayerConnectionState.inRoom);
-            _eventController.add(MultiplayerEvent(
-              type: 'player_joined',
-              senderId: 'system',
-              data: {},
-              timestamp: DateTime.now(),
-            ));
-          }
-          
-          // Verificar si ambos terminaron
-          if (newRoom.status == 'playing') {
-            final allFinished = newRoom.players.values.every((p) => p.isFinished);
-            if (allFinished && _state != MultiplayerConnectionState.finished) {
-              _setState(MultiplayerConnectionState.finished);
-              _eventController.add(MultiplayerEvent(
-                type: 'match_finished',
-                senderId: 'system',
-                data: {
-                  'players': newRoom.players.values.map((p) => p.toJson()).toList(),
-                },
-                timestamp: DateTime.now(),
-              ));
-            }
-          }
+      final roomData = jsonDecode(response.body) as Map<String, dynamic>;
+      final newRoom = GameRoom.fromJson(roomData);
+      final oldRoom = _currentRoom;
+      _updateRoom(newRoom);
+      
+      // Detectar game start
+      if (newRoom.isStarted && _state != MultiplayerConnectionState.playing) {
+        _setState(MultiplayerConnectionState.playing);
+        _eventController.add(MultiplayerEvent(
+          type: 'game_started',
+          senderId: newRoom.hostId,
+          data: {'seed': newRoom.gameSeed, 'startedAtMs': newRoom.startedAtMs},
+          timestamp: DateTime.now(),
+        ));
+      }
+      
+      // Detectar nuevo jugador
+      if (oldRoom != null && newRoom.players.length > oldRoom.players.length) {
+        _setState(MultiplayerConnectionState.inRoom);
+        _eventController.add(MultiplayerEvent(
+          type: 'player_joined',
+          senderId: 'system',
+          data: {},
+          timestamp: DateTime.now(),
+        ));
+      }
+      
+      // Detectar fin de partida
+      if (newRoom.status == 'playing') {
+        final allFinished = newRoom.players.values.every((p) => p.isFinished);
+        if (allFinished && _state != MultiplayerConnectionState.finished) {
+          _setState(MultiplayerConnectionState.finished);
+          _eventController.add(MultiplayerEvent(
+            type: 'match_finished',
+            senderId: 'system',
+            data: {'players': newRoom.players.values.map((p) => p.toJson()).toList()},
+            timestamp: DateTime.now(),
+          ));
         }
       }
-    } catch (e) {
-      // Silently fail polling
-    }
+    } catch (_) {}
   }
 
   String _generateRoomCode() {
-    // Generamos un código que también sirve como blob ID
     const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
     final random = Random();
-    // jsonblob requiere al menos cierta longitud, usamos 8 chars
-    return List.generate(8, (_) => chars[random.nextInt(chars.length)]).join();
+    return List.generate(4, (_) => chars[random.nextInt(chars.length)]).join();
   }
 
   @override
@@ -712,62 +686,7 @@ class SimpleMultiplayerService implements MultiplayerService {
 
 /// Factory para crear el servicio
 class MultiplayerServiceFactory {
-  static MultiplayerService create({bool forceOffline = false}) {
-    if (forceOffline) {
-      return _OfflineMultiplayerService();
-    }
-    return SimpleMultiplayerService();
-  }
-}
-
-/// Implementación offline
-class _OfflineMultiplayerService implements MultiplayerService {
-  final _connectionStateController = StreamController<MultiplayerConnectionState>.broadcast();
-  final _roomController = StreamController<GameRoom?>.broadcast();
-  final _eventController = StreamController<MultiplayerEvent>.broadcast();
-  
-  @override
-  MultiplayerConnectionState get connectionState => MultiplayerConnectionState.disconnected;
-  @override
-  Stream<MultiplayerConnectionState> get connectionStateStream => _connectionStateController.stream;
-  @override
-  Stream<GameRoom?> get roomStream => _roomController.stream;
-  @override
-  Stream<MultiplayerEvent> get eventStream => _eventController.stream;
-  @override
-  GameRoom? get currentRoom => null;
-  @override
-  RoomRole? get role => null;
-  @override
-  String? get playerId => null;
-  @override
-  RoomPlayer? get opponent => null;
-  @override
-  String? get errorMessage => 'Modo offline';
-
-  @override
-  Future<bool> connect(String playerName) async => false;
-  @override
-  Future<void> disconnect() async {}
-  @override
-  Future<GameRoom?> createRoom() async => null;
-  @override
-  Future<GameRoom?> joinRoom(String code) async => null;
-  @override
-  Future<void> leaveRoom() async {}
-  @override
-  Future<void> setReady(bool ready) async {}
-  @override
-  Future<void> startGame() async {}
-  @override
-  Future<void> sendGameUpdate({required int score, required int lives, required int correctAnswers, bool isFinished = false}) async {}
-  @override
-  Future<void> sendGameOver(int finalScore) async {}
-  
-  @override
-  void dispose() {
-    _connectionStateController.close();
-    _roomController.close();
-    _eventController.close();
+  static MultiplayerService create() {
+    return FirebaseMultiplayerService();
   }
 }
