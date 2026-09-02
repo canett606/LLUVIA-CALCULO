@@ -1,276 +1,177 @@
 import 'package:flutter/material.dart';
 
-/// Teclado numérico personalizado para el juego.
-/// Diseñado para ser visible siempre junto al área de juego,
-/// sin invocar el teclado del sistema.
-class NumericKeypad extends StatelessWidget {
-  final void Function(String digit) onDigit;
+/// Teclado numérico compacto para iPhone (máx ~38% altura, min 44px teclas)
+/// Usa GestureDetector + HitTestBehavior.opaque para iOS Safari
+class CompactNumericKeypad extends StatelessWidget {
+  final String currentValue;
+  final void Function(String) onDigit;
   final VoidCallback onBackspace;
   final VoidCallback onClear;
   final VoidCallback onSubmit;
-  final String currentValue;
-  final bool enabled;
 
-  const NumericKeypad({
+  const CompactNumericKeypad({
     super.key,
+    required this.currentValue,
     required this.onDigit,
     required this.onBackspace,
     required this.onClear,
     required this.onSubmit,
-    this.currentValue = '',
-    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withOpacity(0.95),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Display del valor actual
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: theme.colorScheme.outline.withOpacity(0.3),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final height = constraints.maxHeight;
+        final width = constraints.maxWidth;
+        
+        // 4 filas de teclas, display en top
+        final displayH = (height * 0.12).clamp(28.0, 40.0);
+        final keypadH = height - displayH - 8;
+        final rowH = (keypadH / 4).clamp(44.0, 60.0);
+        final keyW = (width - 24) / 3; // 3 columnas con padding
+        
+        return Container(
+          color: const Color(0xFF0A151E),
+          padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+          child: Column(
+            children: [
+              // Display
+              Container(
+                height: displayH,
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A2A3A),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  currentValue.isEmpty ? '—' : currentValue,
+                  style: TextStyle(
+                    fontSize: displayH * 0.55,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'monospace',
+                    letterSpacing: 3,
+                    color: currentValue.isEmpty ? Colors.grey : Colors.white,
+                  ),
                 ),
               ),
-              child: Text(
-                currentValue.isEmpty ? '—' : currentValue,
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
-                  letterSpacing: 4,
-                  color: currentValue.isEmpty 
-                    ? theme.colorScheme.onSurface.withOpacity(0.3)
-                    : theme.colorScheme.onSurface,
+              // Filas de teclas
+              _Row(keys: ['1','2','3'], h: rowH, w: keyW, onTap: onDigit),
+              _Row(keys: ['4','5','6'], h: rowH, w: keyW, onTap: onDigit),
+              _Row(keys: ['7','8','9'], h: rowH, w: keyW, onTap: onDigit),
+              // Fila especial: ⌫, 0, OK
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _Key('⌫', h: rowH, w: keyW, color: const Color(0xFF5C1320), onTap: (_) => onBackspace()),
+                    const SizedBox(width: 4),
+                    _Key('0', h: rowH, w: keyW, onTap: onDigit),
+                    const SizedBox(width: 4),
+                    _Key('OK', h: rowH, w: keyW, 
+                      color: currentValue.isNotEmpty ? const Color(0xFF0A5840) : Colors.grey[800]!,
+                      onTap: currentValue.isNotEmpty ? (_) => onSubmit() : null,
+                    ),
+                  ],
                 ),
-                textAlign: TextAlign.center,
               ),
-            ),
-            
-            // Teclado numérico
-            _buildKeypadGrid(context),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildKeypadGrid(BuildContext context) {
-    return Column(
-      children: [
-        // Fila 1: 1, 2, 3
-        _buildRow(context, ['1', '2', '3']),
-        const SizedBox(height: 8),
-        // Fila 2: 4, 5, 6
-        _buildRow(context, ['4', '5', '6']),
-        const SizedBox(height: 8),
-        // Fila 3: 7, 8, 9
-        _buildRow(context, ['7', '8', '9']),
-        const SizedBox(height: 8),
-        // Fila 4: Borrar, 0, OK
-        _buildBottomRow(context),
-        const SizedBox(height: 8),
-        // Fila 5: Limpiar todo (ancho completo)
-        _buildClearButton(context),
-      ],
-    );
-  }
-
-  Widget _buildRow(BuildContext context, List<String> digits) {
-    return Row(
-      children: digits.map((digit) {
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: _DigitButton(
-              digit: digit,
-              onTap: enabled ? () => onDigit(digit) : null,
-            ),
+            ],
           ),
         );
-      }).toList(),
+      },
     );
   }
+}
 
-  Widget _buildBottomRow(BuildContext context) {
-    final theme = Theme.of(context);
-    
-    return Row(
-      children: [
-        // Backspace
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: _ActionButton(
-              icon: Icons.backspace_outlined,
-              label: '⌫',
-              onTap: enabled ? onBackspace : null,
-              color: theme.colorScheme.errorContainer,
-              foregroundColor: theme.colorScheme.onErrorContainer,
-            ),
-          ),
-        ),
-        // 0
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: _DigitButton(
-              digit: '0',
-              onTap: enabled ? () => onDigit('0') : null,
-            ),
-          ),
-        ),
-        // OK / Submit
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: _ActionButton(
-              label: 'OK',
-              onTap: enabled && currentValue.isNotEmpty ? onSubmit : null,
-              color: theme.colorScheme.primaryContainer,
-              foregroundColor: theme.colorScheme.onPrimaryContainer,
-              isSubmit: true,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+class _Row extends StatelessWidget {
+  final List<String> keys;
+  final double h;
+  final double w;
+  final void Function(String) onTap;
 
-  Widget _buildClearButton(BuildContext context) {
-    final theme = Theme.of(context);
-    
+  const _Row({required this.keys, required this.h, required this.w, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: SizedBox(
-        width: double.infinity,
-        height: 48,
-        child: ElevatedButton(
-          onPressed: enabled && currentValue.isNotEmpty ? onClear : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: theme.colorScheme.tertiaryContainer,
-            foregroundColor: theme.colorScheme.onTertiaryContainer,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: const Text(
-            'BORRAR TODO',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1,
-            ),
-          ),
-        ),
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: keys.map((k) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: _Key(k, h: h, w: w, onTap: onTap),
+        )).toList(),
       ),
     );
   }
 }
 
-class _DigitButton extends StatelessWidget {
-  final String digit;
-  final VoidCallback? onTap;
-
-  const _DigitButton({
-    required this.digit,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
-    return SizedBox(
-      height: 64,
-      child: ElevatedButton(
-        onPressed: onTap,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: theme.colorScheme.surfaceContainerHigh,
-          foregroundColor: theme.colorScheme.onSurface,
-          elevation: 2,
-          shadowColor: Colors.black26,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          padding: EdgeInsets.zero,
-        ),
-        child: Text(
-          digit,
-          style: const TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  final IconData? icon;
+class _Key extends StatefulWidget {
   final String label;
-  final VoidCallback? onTap;
-  final Color color;
-  final Color foregroundColor;
-  final bool isSubmit;
+  final double h;
+  final double w;
+  final Color? color;
+  final void Function(String)? onTap;
 
-  const _ActionButton({
-    this.icon,
-    required this.label,
-    required this.onTap,
-    required this.color,
-    required this.foregroundColor,
-    this.isSubmit = false,
-  });
+  const _Key(this.label, {required this.h, required this.w, this.color, this.onTap});
+
+  @override
+  State<_Key> createState() => _KeyState();
+}
+
+class _KeyState extends State<_Key> {
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 64,
-      child: ElevatedButton(
-        onPressed: onTap,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: foregroundColor,
-          elevation: isSubmit ? 4 : 2,
-          shadowColor: isSubmit ? color.withOpacity(0.5) : Colors.black26,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          padding: EdgeInsets.zero,
+    final baseColor = widget.color ?? const Color(0xFF2A3A4A);
+    final enabled = widget.onTap != null;
+    
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+      onTapUp: enabled ? (_) {
+        setState(() => _pressed = false);
+        widget.onTap!(widget.label);
+      } : null,
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 50),
+        height: widget.h,
+        width: widget.w,
+        decoration: BoxDecoration(
+          color: _pressed ? baseColor.withAlpha(150) : baseColor.withAlpha(enabled ? 255 : 100),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: _pressed ? null : [
+            BoxShadow(color: Colors.black26, blurRadius: 2, offset: const Offset(0, 1)),
+          ],
         ),
-        child: icon != null
-          ? Icon(icon, size: 28)
-          : Text(
-              label,
-              style: TextStyle(
-                fontSize: isSubmit ? 22 : 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+        alignment: Alignment.center,
+        child: Text(
+          widget.label,
+          style: TextStyle(
+            fontSize: (widget.h * 0.4).clamp(16.0, 24.0),
+            fontWeight: FontWeight.bold,
+            color: enabled ? Colors.white : Colors.white38,
+          ),
+        ),
       ),
     );
   }
+}
+
+// Alias para compatibilidad
+class NumericKeypad extends CompactNumericKeypad {
+  const NumericKeypad({
+    super.key,
+    required super.currentValue,
+    required super.onDigit,
+    required super.onBackspace,
+    required super.onClear,
+    required super.onSubmit,
+    bool enabled = true,
+  });
 }
