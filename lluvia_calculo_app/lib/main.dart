@@ -10,6 +10,9 @@ import 'screens/welcome_screen.dart';
 import 'screens/game_screen.dart';
 import 'screens/multiplayer_screen.dart';
 import 'screens/multiplayer_game_screen.dart';
+import 'screens/tournament_screen.dart';
+import 'screens/tournament_match_screen.dart';
+import 'services/tournament_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -79,6 +82,21 @@ class LluviaCalculoApp extends StatelessWidget {
           '/game': (context) => const GameScreen(),
           '/multiplayer': (context) => const MultiplayerScreen(),
           '/multiplayer-game': (context) => const MultiplayerGameScreen(),
+          '/tournament': (context) => const TournamentScreen(),
+        },
+        onGenerateRoute: (settings) {
+          if (settings.name == '/tournament-match') {
+            final args = settings.arguments as Map<String, dynamic>;
+            return MaterialPageRoute(
+              builder: (context) => TournamentMatchScreen(
+                roomCode: args['roomCode'] as String,
+                matchId: args['matchId'] as String,
+                tournamentCode: args['tournamentCode'] as String,
+                tournamentService: args['tournamentService'] as TournamentService,
+              ),
+            );
+          }
+          return null;
         },
       ),
     );

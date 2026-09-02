@@ -273,6 +273,53 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
           
           const SizedBox(height: 32),
           
+          // Campeonato
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.amber.withAlpha(30), Colors.orange.withAlpha(30)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.amber.withAlpha(100)),
+            ),
+            child: Column(
+              children: [
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.emoji_events, color: Colors.amber, size: 24),
+                    SizedBox(width: 8),
+                    Text('Campeonato', style: TextStyle(color: Colors.amber, fontSize: 18, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Torneos de 4, 8 o 16 jugadores\nEliminación directa hasta el campeón',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pushNamed('/tournament'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'ENTRAR AL CAMPEONATO',
+                      style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          
           // Info
           Container(
             padding: const EdgeInsets.all(12),
@@ -287,7 +334,7 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
                   children: [
                     Icon(Icons.info_outline, color: Colors.blue[300], size: 18),
                     const SizedBox(width: 8),
-                    Text('Cómo funciona:', style: TextStyle(color: Colors.blue[300], fontWeight: FontWeight.bold)),
+                    Text('Cómo funciona 1v1:', style: TextStyle(color: Colors.blue[300], fontWeight: FontWeight.bold)),
                   ],
                 ),
                 const SizedBox(height: 8),
