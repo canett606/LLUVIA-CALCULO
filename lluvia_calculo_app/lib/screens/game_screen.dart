@@ -15,22 +15,16 @@ import 'local_duel_screen.dart';
 /// En iPhone Safari el Focus/autofocus de Flutter crea un <input> oculto
 /// que se come los toques del botón INICIAR. Solo usamos teclado físico en desktop.
 bool get _usePhysicalKeyboard {
-  if (kIsWeb) {
-    // coarse pointer ≈ táctil (iPhone/iPad)
-    // ignore: deprecated_member_use
-    return PlatformDispatcher.instance.implicitView?.devicePixelRatio != null &&
-        WidgetsBinding.instance.platformDispatcher.views.isNotEmpty &&
-        !_looksLikeTouchWeb;
+  // En iOS/Android (app o Safari) el Focus de Flutter Web crea un input
+  // oculto que intercepta el botón INICIAR. Solo escritorio.
+  if (defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.android) {
+    return false;
   }
   return defaultTargetPlatform == TargetPlatform.macOS ||
       defaultTargetPlatform == TargetPlatform.windows ||
-      defaultTargetPlatform == TargetPlatform.linux;
-}
-
-bool get _looksLikeTouchWeb {
-  // Heurística: en web móvil no hay teclado físico útil
-  return defaultTargetPlatform == TargetPlatform.iOS ||
-      defaultTargetPlatform == TargetPlatform.android;
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.fuchsia;
 }
 
 /// Pantalla principal del juego.
@@ -622,21 +616,23 @@ class _ChoiceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _TapTarget(
-      onTap: onTap,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 44),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF62D6FF) : Colors.grey[800],
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.black87 : Colors.white,
-            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 14,
+    return Material(
+      color: selected ? const Color(0xFF62D6FF) : Colors.grey[800],
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.black87 : Colors.white,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              fontSize: 14,
+            ),
           ),
         ),
       ),
