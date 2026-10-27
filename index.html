@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base href="/LLUVIA-CALCULO/">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Lluvia de Cálculo Mental">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Lluvia Cálculo">
+  <meta name="theme-color" content="#07131D">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="icons/Icon-512.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>Lluvia de Cálculo Mental</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      height: 100dvh;
+      width: 100%;
+      background-color: #07131D;
+      overflow: hidden;
+      -webkit-overflow-scrolling: touch;
+      touch-action: manipulation;
+    }
+    /* Evitar que Safari robe el primer toque / cree input fantasma */
+    flt-glass-pane, flt-scene-host, canvas, flt-semantics-placeholder {
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* El input oculto de Focus en Flutter Web no debe tapar botones en iOS */
+    input.flt-text-editing,
+    .flt-text-editing,
+    flt-semantics input {
+      pointer-events: none !important;
+      opacity: 0 !important;
+      width: 1px !important;
+      height: 1px !important;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (reg) { reg.update(); });
+      });
+    }
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
