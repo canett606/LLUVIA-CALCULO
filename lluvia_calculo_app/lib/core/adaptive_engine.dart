@@ -213,6 +213,12 @@ class AdaptiveEngine {
       case GameMode.porNiveles:
         baseInterval = 2800;
         break;
+      case GameMode.infinito:
+        baseInterval = 3200;
+        break;
+      case GameMode.dueloLocal:
+        baseInterval = 2600;
+        break;
     }
     
     // Reducir intervalo con tier más alto (pero suavemente)

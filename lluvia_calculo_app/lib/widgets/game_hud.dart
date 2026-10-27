@@ -194,6 +194,10 @@ class GameHud extends StatelessWidget {
         return 'Supervivencia';
       case GameMode.porNiveles:
         return 'Por niveles';
+      case GameMode.infinito:
+        return 'Infinito';
+      case GameMode.dueloLocal:
+        return 'Duelo local';
     }
   }
 }

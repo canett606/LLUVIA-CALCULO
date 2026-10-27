@@ -6,12 +6,14 @@ class FallingDropWidget extends StatelessWidget {
   final FallingDrop drop;
   final double areaHeight;
   final double areaWidth;
+  final bool enlarged;
 
   const FallingDropWidget({
     super.key,
     required this.drop,
     required this.areaHeight,
     required this.areaWidth,
+    this.enlarged = false,
   });
 
   @override
@@ -37,11 +39,14 @@ class FallingDropWidget extends StatelessWidget {
       left: x - 44, // Centrar el widget
       top: y,
       child: Container(
-        constraints: const BoxConstraints(
-          minWidth: 88,
-          maxWidth: 120,
+        constraints: BoxConstraints(
+          minWidth: enlarged ? 120 : 88,
+          maxWidth: enlarged ? 220 : 120,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: enlarged ? 18 : 12,
+          vertical: enlarged ? 14 : 10,
+        ),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -73,7 +78,7 @@ class FallingDropWidget extends StatelessWidget {
           drop.operation.expression,
           style: TextStyle(
             color: theme.colorScheme.onPrimary,
-            fontSize: 18,
+            fontSize: enlarged ? 32 : 18,
             fontWeight: FontWeight.bold,
             shadows: [
               Shadow(
@@ -94,11 +99,13 @@ class FallingDropWidget extends StatelessWidget {
 class GamePlayfield extends StatelessWidget {
   final List<FallingDrop> drops;
   final String? message;
+  final bool enlarged;
 
   const GamePlayfield({
     super.key,
     required this.drops,
     this.message,
+    this.enlarged = false,
   });
 
   @override
@@ -168,6 +175,7 @@ class GamePlayfield extends StatelessWidget {
                   drop: drop,
                   areaHeight: height - 60, // Restar altura del suelo
                   areaWidth: width,
+                  enlarged: enlarged,
                 )),
                 
                 // Mensaje de feedback

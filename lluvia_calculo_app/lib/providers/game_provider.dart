@@ -9,6 +9,7 @@ import '../models/game_state.dart';
 import '../core/operation_generator.dart';
 import '../core/adaptive_engine.dart';
 import '../core/scoring_engine.dart';
+import '../core/physical_keyboard.dart';
 import '../services/storage_service.dart';
 import '../services/audio_service.dart';
 import '../services/multiplayer_service.dart';
@@ -106,32 +107,38 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Inicia una nueva partida
+  /// Inicia una nueva partida.
+  /// No exige perfil: si no hay jugador guardado, la partida arranca igual.
   void startGame() {
-    if (_currentProfile == null) return;
-    
     _stopAllTimers();
-    
-    // Configurar estado inicial según modo
-    _state = GameState.forMode(_state.mode, family: _state.selectedFamily);
-    _state = _state.copyWith(
+    _inputBuffer = '';
+
+    final starting = GameState.forMode(_state.mode, family: _state.selectedFamily);
+    _state = starting.copyWith(
       isRunning: true,
       isPaused: false,
+      isGameOver: false,
       currentTier: _adaptiveParams.suggestedTier,
-      lastMessage: '¡Empieza la lluvia!',
+      lastMessage: starting.mode == GameMode.infinito
+          ? 'Decid el resultado en voz alta'
+          : '¡Empieza la lluvia!',
     );
-    
-    // Iniciar timers
+    // Avisar ya, para que el menú desaparezca aunque falle el primer spawn.
+    notifyListeners();
+
     _startGameLoop();
     _startSpawnTimer();
-    
+
     if (_state.mode == GameMode.porTiempo) {
       _startCountdownTimer();
     }
-    
-    // Spawn inicial
-    _spawnDrop();
-    
+
+    try {
+      _spawnDrop();
+    } catch (_) {
+      _state = _state.copyWith(lastMessage: 'No se pudo crear la operación');
+    }
+
     notifyListeners();
   }
 
@@ -171,18 +178,9 @@ class GameProvider extends ChangeNotifier {
   void appendDigit(String digit) {
     if (!_state.isRunning || _state.isPaused) return;
 
-    if (digit == '−' || digit == '-') {
-      if (_inputBuffer.isEmpty) {
-        _inputBuffer = '-';
-        _audio.playTap();
-        notifyListeners();
-      }
-      return;
-    }
-
-    if (_inputBuffer.length >= 8) return;
-
-    _inputBuffer += digit;
+    final next = applyKeyDigit(_inputBuffer, digit);
+    if (next == _inputBuffer) return;
+    _inputBuffer = next;
     _audio.playTap();
     _tryAutoValidate();
     notifyListeners();
@@ -247,8 +245,11 @@ class GameProvider extends ChangeNotifier {
   }
 
   void _startSpawnTimer() {
+    final intervalMs = _state.mode == GameMode.infinito
+        ? 3200
+        : _adaptiveParams.spawnIntervalMs.round();
     _spawnTimer = Timer.periodic(
-      Duration(milliseconds: _adaptiveParams.spawnIntervalMs.round()),
+      Duration(milliseconds: intervalMs),
       (_) {
         if (!_state.isRunning || _state.isPaused) return;
         _spawnDrop();
@@ -321,8 +322,8 @@ class GameProvider extends ChangeNotifier {
   }
 
   void _spawnDrop() {
-    // Limitar número de gotas activas
-    if (_state.activeDrops.length >= 8) return;
+    final maxDrops = _state.mode == GameMode.infinito ? 4 : 8;
+    if (_state.activeDrops.length >= maxDrops) return;
     
     // Determinar tier basado en modo adaptativo
     int tier = _state.currentTier;
@@ -372,6 +373,12 @@ class GameProvider extends ChangeNotifier {
         break;
       case GameMode.porNiveles:
         baseSpeed = 0.15;
+        break;
+      case GameMode.infinito:
+        baseSpeed = 0.07;
+        break;
+      case GameMode.dueloLocal:
+        baseSpeed = 0.14;
         break;
     }
     
@@ -437,6 +444,13 @@ class GameProvider extends ChangeNotifier {
   }
 
   void _handleMiss(FallingDrop drop) {
+    if (_state.mode == GameMode.infinito) {
+      _state = _state.copyWith(
+        lastMessage: '${drop.operation.expression} = ${drop.operation.answer}',
+      );
+      return;
+    }
+
     _audio.playMiss();
     
     final missResult = _scoringEngine.calculateMiss(
@@ -540,6 +554,10 @@ class GameProvider extends ChangeNotifier {
             lastMessage: '¡Desbloqueado nivel $newLevel!',
           );
         }
+        break;
+      case GameMode.infinito:
+      case GameMode.dueloLocal:
+        newLevel = 1 + (_state.score ~/ 100);
         break;
     }
     

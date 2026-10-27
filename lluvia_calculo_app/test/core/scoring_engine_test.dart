@@ -280,6 +280,16 @@ void main() {
         expect(result.victory, isTrue);
       });
 
+      test('el modo infinito no termina aunque no queden vidas', () {
+        final state = const GameState(
+          mode: GameMode.infinito,
+          lives: 0,
+          score: 40,
+        );
+
+        expect(engine.checkGameEnd(state), isNull);
+      });
+
       test('retorna null cuando juego continúa', () {
         final state = const GameState(
           lives: 3,

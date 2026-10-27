@@ -129,6 +129,10 @@ class ScoringEngine {
         return (basePoints * 1.3).round(); // Mayor recompensa por riesgo
       case GameMode.porNiveles:
         return basePoints;
+      case GameMode.infinito:
+        return basePoints;
+      case GameMode.dueloLocal:
+        return basePoints;
     }
   }
 
@@ -147,6 +151,11 @@ class ScoringEngine {
 
   /// Determina si el juego ha terminado
   GameEndResult? checkGameEnd(GameState state) {
+    // La pizarra y el duelo local no terminan por vidas ni por tiempo aquí.
+    if (state.mode == GameMode.infinito || state.mode == GameMode.dueloLocal) {
+      return null;
+    }
+
     // Verificar vidas
     if (state.lives <= 0) {
       return GameEndResult(

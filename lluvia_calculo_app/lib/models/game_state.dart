@@ -8,6 +8,8 @@ enum GameMode {
   porPuntuacion, // Alcanzar puntuación objetivo
   supervivencia, // Vidas limitadas, dificultad creciente
   porNiveles,  // Desbloquear niveles por maestría
+  infinito,    // Pizarra: no termina; pausa y salir manual
+  dueloLocal,  // 1 vs 1 en la misma pantalla
 }
 
 /// Estado de una gota cayendo
@@ -181,6 +183,23 @@ class GameState extends Equatable {
           lives: 6,
           maxLives: 6,
           currentTier: 1,
+        );
+      case GameMode.infinito:
+        return GameState(
+          mode: mode,
+          selectedFamily: family,
+          lives: 999,
+          maxLives: 999,
+          currentTier: 2,
+        );
+      case GameMode.dueloLocal:
+        return GameState(
+          mode: mode,
+          selectedFamily: family,
+          lives: 999,
+          maxLives: 999,
+          timeRemaining: const Duration(seconds: 90),
+          currentTier: 2,
         );
     }
   }
