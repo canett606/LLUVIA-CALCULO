@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +11,27 @@ import '../models/player_profile.dart';
 import '../widgets/falling_drop.dart';
 import '../widgets/numeric_keypad.dart';
 import 'local_duel_screen.dart';
+
+/// En iPhone Safari el Focus/autofocus de Flutter crea un <input> oculto
+/// que se come los toques del botón INICIAR. Solo usamos teclado físico en desktop.
+bool get _usePhysicalKeyboard {
+  if (kIsWeb) {
+    // coarse pointer ≈ táctil (iPhone/iPad)
+    // ignore: deprecated_member_use
+    return PlatformDispatcher.instance.implicitView?.devicePixelRatio != null &&
+        WidgetsBinding.instance.platformDispatcher.views.isNotEmpty &&
+        !_looksLikeTouchWeb;
+  }
+  return defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux;
+}
+
+bool get _looksLikeTouchWeb {
+  // Heurística: en web móvil no hay teclado físico útil
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.android;
+}
 
 /// Pantalla principal del juego.
 /// KEYPAD SOLO APARECE cuando state.isRunning && !state.isPaused && !state.isGameOver
@@ -31,9 +53,12 @@ class _GameScreenState extends State<GameScreen> {
       SystemUiMode.edgeToEdge,
       overlays: [SystemUiOverlay.top],
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focus.requestFocus();
-    });
+    // No pedir foco en iPhone: el input oculto de Flutter Web bloquea INICIAR
+    if (_usePhysicalKeyboard) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focus.requestFocus();
+      });
+    }
   }
 
   @override
@@ -49,7 +74,9 @@ class _GameScreenState extends State<GameScreen> {
       return;
     }
     provider.startGame();
-    _focus.requestFocus();
+    if (_usePhysicalKeyboard && mounted) {
+      _focus.requestFocus();
+    }
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
@@ -117,29 +144,22 @@ class _GameScreenState extends State<GameScreen> {
     final bool inMatch = state.isRunning && !state.isPaused && !state.isGameOver;
     final maxWidth = state.mode == GameMode.infinito && state.isRunning ? 1100.0 : 560.0;
 
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => _focus.requestFocus(),
-      child: Focus(
-      focusNode: _focus,
-      autofocus: true,
-      onKeyEvent: _onKey,
-      child: Scaffold(
-        resizeToAvoidBottomInset: false,
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF0C2431), Color(0xFF07131D)],
-            ),
+    Widget body = Scaffold(
+      resizeToAvoidBottomInset: false,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF0C2431), Color(0xFF07131D)],
           ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxWidth),
-              child: SafeArea(
-                bottom: false,
-                child: inMatch
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: SafeArea(
+              bottom: false,
+              child: inMatch
                   ? _ActiveGameLayout(provider: provider, state: state, profile: profile)
                   : _MenuLayout(
                       provider: provider,
@@ -147,11 +167,26 @@ class _GameScreenState extends State<GameScreen> {
                       profile: profile,
                       onStart: _startFromMenu,
                     ),
-              ),
             ),
           ),
         ),
       ),
+    );
+
+    // Teclado físico solo en escritorio. En iPhone Safari el Focus crea un
+    // <input> oculto que intercepta el toque de INICIAR.
+    if (!_usePhysicalKeyboard) return body;
+
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) {
+        if (!_focus.hasFocus) _focus.requestFocus();
+      },
+      child: Focus(
+        focusNode: _focus,
+        autofocus: true,
+        onKeyEvent: _onKey,
+        child: body,
       ),
     );
   }
@@ -626,49 +661,36 @@ class _BigButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _TapTarget(
-      onTap: onTap,
-      child: Container(
-        height: height,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 26, color: Colors.black87),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-                letterSpacing: 0.5,
-              ),
+    // ElevatedButton + onPointerUp: fiable en iPhone Safari
+    return SizedBox(
+      width: double.infinity,
+      height: height,
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerUp: (_) => onTap(),
+        child: ElevatedButton.icon(
+          onPressed: onTap,
+          icon: Icon(icon, size: 26, color: Colors.black87),
+          label: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+              letterSpacing: 0.5,
             ),
-          ],
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            foregroundColor: Colors.black87,
+            elevation: 3,
+            padding: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
         ),
       ),
-    );
-  }
-}
-
-/// onPointerDown: en iPhone Safari el onTap dentro de un scroll no llega.
-class _TapTarget extends StatelessWidget {
-  final VoidCallback onTap;
-  final Widget child;
-
-  const _TapTarget({required this.onTap, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: (_) => onTap(),
-      child: child,
     );
   }
 }

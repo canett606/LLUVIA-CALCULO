@@ -65,17 +65,25 @@ class GameProvider extends ChangeNotifier {
   /// Inicializa el provider cargando datos guardados
   Future<void> initialize() async {
     if (_isInitialized) return;
-    
+
     await _storage.init();
-    await _audio.init();
-    
-    // Cargar jugador actual si existe
-    final profile = await _storage.getCurrentPlayer();
-    if (profile != null) {
-      _currentProfile = profile;
-      _updateAdaptiveParams();
+    // El audio no debe impedir jugar (falla frecuente en web/Safari)
+    try {
+      await _audio.init();
+    } catch (e) {
+      debugPrint('Audio no disponible: $e');
     }
-    
+
+    try {
+      final profile = await _storage.getCurrentPlayer();
+      if (profile != null) {
+        _currentProfile = profile;
+        _updateAdaptiveParams();
+      }
+    } catch (e) {
+      debugPrint('No se pudo cargar perfil: $e');
+    }
+
     _isInitialized = true;
     notifyListeners();
   }
@@ -108,35 +116,53 @@ class GameProvider extends ChangeNotifier {
   }
 
   /// Inicia una nueva partida.
-  /// No exige perfil: si no hay jugador guardado, la partida arranca igual.
+  /// No exige perfil: si no hay jugador guardado, crea uno invitado.
   void startGame() {
+    // Evita doble disparo (Listener + botón) en Safari
+    if (_state.isRunning && !_state.isGameOver) return;
+
+    if (_currentProfile == null) {
+      _currentProfile = PlayerProfile.create('Jugador');
+      _updateAdaptiveParams();
+      _saveProfile();
+      _storage.setCurrentPlayerId(_currentProfile!.id);
+    }
+
     _stopAllTimers();
     _inputBuffer = '';
+    _generator.resetSession();
 
     final starting = GameState.forMode(_state.mode, family: _state.selectedFamily);
     _state = starting.copyWith(
       isRunning: true,
       isPaused: false,
       isGameOver: false,
-      currentTier: _adaptiveParams.suggestedTier,
+      currentTier: _adaptiveParams.suggestedTier.clamp(
+        1,
+        OperationDifficulty.maxTier,
+      ),
       lastMessage: starting.mode == GameMode.infinito
           ? 'Decid el resultado en voz alta'
           : '¡Empieza la lluvia!',
+      activeDrops: const [],
     );
     // Avisar ya, para que el menú desaparezca aunque falle el primer spawn.
     notifyListeners();
 
-    _startGameLoop();
-    _startSpawnTimer();
-
-    if (_state.mode == GameMode.porTiempo) {
-      _startCountdownTimer();
-    }
-
     try {
+      _startGameLoop();
+      _startSpawnTimer();
+
+      if (_state.mode == GameMode.porTiempo) {
+        _startCountdownTimer();
+      }
+
       _spawnDrop();
-    } catch (_) {
-      _state = _state.copyWith(lastMessage: 'No se pudo crear la operación');
+    } catch (e, st) {
+      debugPrint('Error al iniciar partida: $e\n$st');
+      _state = _state.copyWith(
+        lastMessage: 'No se pudo iniciar. Pulsa de nuevo.',
+      );
     }
 
     notifyListeners();
