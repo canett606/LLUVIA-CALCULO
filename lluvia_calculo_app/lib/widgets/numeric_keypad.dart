@@ -61,17 +61,19 @@ class CompactNumericKeypad extends StatelessWidget {
               _Row(keys: ['1','2','3'], h: rowH, w: keyW, onTap: onDigit),
               _Row(keys: ['4','5','6'], h: rowH, w: keyW, onTap: onDigit),
               _Row(keys: ['7','8','9'], h: rowH, w: keyW, onTap: onDigit),
-              // Fila especial: ⌫, 0, OK
+              // Fila especial: ⌫, −, 0, OK (signo negativo para niveles altos)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _Key('⌫', h: rowH, w: keyW, color: const Color(0xFF5C1320), onTap: (_) => onBackspace()),
-                    const SizedBox(width: 4),
-                    _Key('0', h: rowH, w: keyW, onTap: onDigit),
-                    const SizedBox(width: 4),
-                    _Key('OK', h: rowH, w: keyW, 
+                    _Key('⌫', h: rowH, w: keyW * 0.85, color: const Color(0xFF5C1320), onTap: (_) => onBackspace()),
+                    const SizedBox(width: 3),
+                    _Key('−', h: rowH, w: keyW * 0.85, color: const Color(0xFF3A2A1A), onTap: onDigit),
+                    const SizedBox(width: 3),
+                    _Key('0', h: rowH, w: keyW * 0.85, onTap: onDigit),
+                    const SizedBox(width: 3),
+                    _Key('OK', h: rowH, w: keyW * 0.85,
                       color: currentValue.isNotEmpty ? const Color(0xFF0A5840) : Colors.grey[800]!,
                       onTap: currentValue.isNotEmpty ? (_) => onSubmit() : null,
                     ),

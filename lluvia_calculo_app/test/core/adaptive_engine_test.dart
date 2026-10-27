@@ -370,7 +370,7 @@ void main() {
           mode: GameMode.porTiempo,
         );
         
-        expect(params.suggestedTier, lessThanOrEqualTo(5));
+        expect(params.suggestedTier, lessThanOrEqualTo(OperationDifficulty.maxTier));
         expect(params.suggestedTier, greaterThanOrEqualTo(1));
       });
 

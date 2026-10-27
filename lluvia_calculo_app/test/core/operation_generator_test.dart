@@ -140,6 +140,31 @@ void main() {
         expect(hasLargeAnswer, isTrue, 
           reason: 'Tier 5 debe generar sumas con resultados > 200');
       });
+
+      test('tiers altos generan multiplicaciones de dos cifras', () {
+        bool hasTwoDigit = false;
+        for (int i = 0; i < 30; i++) {
+          final op = generator.generate(tier: 7, family: OperationFamily.multiplicaciones);
+          final parts = op.expression.split(' × ');
+          if (int.parse(parts[0]) >= 10 && int.parse(parts[1]) >= 10) {
+            hasTwoDigit = true;
+          }
+          expect(int.parse(parts[0]) * int.parse(parts[1]), equals(op.answer));
+        }
+        expect(hasTwoDigit, isTrue);
+      });
+
+      test('tier 9+ puede generar potencias o raíces', () {
+        bool found = false;
+        for (int i = 0; i < 40; i++) {
+          final op = generator.generate(tier: 9, family: OperationFamily.mixtas);
+          if (op.type == OperationType.power) {
+            found = true;
+            expect(op.expression.contains(RegExp(r'[²³⁴⁵⁶⁷⁸⁹√∛^]')), isTrue);
+          }
+        }
+        expect(found, isTrue, reason: 'Tier 9 mixtas debe incluir potencias/raíces');
+      });
     });
 
     group('Generación adaptativa', () {

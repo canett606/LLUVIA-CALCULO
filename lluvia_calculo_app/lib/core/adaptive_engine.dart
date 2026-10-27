@@ -14,6 +14,8 @@ class AdaptiveParameters {
   final bool shouldIncreaseDifficulty;
   final bool shouldDecreaseDifficulty;
 
+  static const int maxTier = OperationDifficulty.maxTier;
+
   const AdaptiveParameters({
     required this.suggestedTier,
     required this.speedMultiplier,
@@ -59,19 +61,14 @@ class AdaptiveEngine {
     required GameState currentSession,
     required GameMode mode,
   }) {
-    // Para jugadores nuevos, empezar conservador
-    if (profile.totalSessions == 0 && currentSession.correctThisSession == 0) {
-      return AdaptiveParameters.forBeginner();
-    }
-
     // Analizar fortalezas y debilidades por familia
     final strongFamilies = <OperationFamily>[];
     final weakFamilies = <OperationFamily>[];
-    
+
     for (final entry in profile.familyStats.entries) {
       final stats = entry.value;
       final samples = stats.correct + stats.incorrect;
-      
+
       if (samples >= _minSamplesForAdjustment) {
         if (stats.accuracy >= _highAccuracyThreshold) {
           strongFamilies.add(entry.key);
@@ -79,6 +76,14 @@ class AdaptiveEngine {
           weakFamilies.add(entry.key);
         }
       }
+    }
+
+    // Jugador nuevo sin historial: empezar conservador
+    final hasHistory = profile.totalSessions > 0 ||
+        profile.totalCorrect > 0 ||
+        profile.familyStats.isNotEmpty;
+    if (!hasHistory && currentSession.correctThisSession == 0) {
+      return AdaptiveParameters.forBeginner();
     }
 
     // Calcular tier sugerido basado en memoria
@@ -96,12 +101,12 @@ class AdaptiveEngine {
       // 3. No subir más de 1 tier por sesión
       if (currentSession.sessionAccuracy >= _highAccuracyThreshold && 
           currentSession.streak >= _streakToIncrease &&
-          suggestedTier < 5) {
+          suggestedTier < AdaptiveParameters.maxTier) {
         shouldIncrease = true;
       } 
-      // Bajar si precisión baja
+      // Bajar si precisión baja y aún hay margen (tier de sesión o sugerido)
       else if (currentSession.sessionAccuracy < _lowAccuracyThreshold &&
-               suggestedTier > 1) {
+               (suggestedTier > 1 || currentSession.currentTier > 1)) {
         shouldDecrease = true;
       }
     }
@@ -129,14 +134,14 @@ class AdaptiveEngine {
 
   int _calculateSuggestedTier(PlayerProfile profile, GameState session, GameMode mode) {
     // Base: usar el tier guardado del jugador para esta familia
-    int baseTier = profile.globalTierUnlocked.clamp(1, 5);
+    int baseTier = profile.globalTierUnlocked.clamp(1, AdaptiveParameters.maxTier);
     
     // Para modo aprendizaje, ser más conservador
     if (mode == GameMode.aprendizaje) {
       // Usar el tier específico de la familia seleccionada si existe
       final familyStats = profile.familyStats[session.selectedFamily];
       if (familyStats != null && familyStats.correct + familyStats.incorrect >= _minSamplesForAdjustment) {
-        baseTier = familyStats.maxTierUnlocked.clamp(1, 5);
+        baseTier = familyStats.maxTierUnlocked.clamp(1, AdaptiveParameters.maxTier);
       } else {
         // Sin datos, empezar desde 1
         baseTier = 1;
@@ -155,12 +160,12 @@ class AdaptiveEngine {
     
     // Ajustar según sesión actual (pero máximo ±1)
     if (session.correctThisSession > 15 && session.sessionAccuracy > _highAccuracyThreshold) {
-      baseTier = min(5, baseTier + 1);
+      baseTier = min(AdaptiveParameters.maxTier, baseTier + 1);
     } else if (session.sessionAccuracy < 0.4 && session.incorrectThisSession > 5) {
       baseTier = max(1, baseTier - 1);
     }
     
-    return baseTier.clamp(1, 5);
+    return baseTier.clamp(1, AdaptiveParameters.maxTier);
   }
 
   double _calculateSpeedMultiplier(PlayerProfile profile, GameState session, GameMode mode) {
@@ -282,7 +287,7 @@ class AdaptiveEngine {
       final recentAccuracy = newCorrect / totalResponses;
       if (recentAccuracy >= 0.7 && newCorrect >= 5) {
         // Desbloquear siguiente tier (máximo +1)
-        newMaxTier = min(5, tier + 1);
+        newMaxTier = min(AdaptiveParameters.maxTier, tier + 1);
       }
     }
     
@@ -343,7 +348,7 @@ class AdaptiveEngine {
       OperationFamily.multiplicaciones,
     ];
     
-    int minTier = 5;
+    int minTier = AdaptiveParameters.maxTier;
     int familiesWithStats = 0;
     
     for (final family in coreFamilies) {
@@ -377,7 +382,7 @@ class AdaptiveEngine {
     
     // Si racha actual es buena, permitir subir 1
     if (session.streak >= _streakToIncrease && session.sessionAccuracy >= _highAccuracyThreshold) {
-      return min(5, currentTier + 1);
+      return min(AdaptiveParameters.maxTier, currentTier + 1);
     }
     
     // Si está luchando, bajar

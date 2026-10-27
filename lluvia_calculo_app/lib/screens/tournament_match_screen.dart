@@ -37,6 +37,7 @@ class _TournamentMatchScreenState extends State<TournamentMatchScreen> {
   int _correctAnswers = 0;
   int _rivalScore = 0;
   int _timeRemaining = 90;
+  int _spawnCount = 0;
   String _currentInput = '';
   bool _isPlaying = false;
   bool _isWaiting = true;
@@ -152,9 +153,12 @@ class _TournamentMatchScreenState extends State<TournamentMatchScreen> {
   }
 
   void _spawnDrop(Random random) {
+    // Progresión por spawns (sincronizada entre rivales con la misma seed)
+    _spawnCount++;
+    final tier = (2 + (_spawnCount ~/ 6)).clamp(1, OperationDifficulty.maxTier);
     final operation = _generator.generate(
       family: OperationFamily.todas,
-      tier: 2 + (_score ~/ 100),
+      tier: tier,
     );
     
     final screenWidth = MediaQuery.of(context).size.width;
@@ -172,63 +176,64 @@ class _TournamentMatchScreenState extends State<TournamentMatchScreen> {
 
   void _handleInput(String digit) {
     if (!_isPlaying || _gameEnded) return;
-    
-    setState(() {
-      if (digit == 'C') {
-        _currentInput = '';
-      } else if (digit == 'DEL') {
-        if (_currentInput.isNotEmpty) {
-          _currentInput = _currentInput.substring(0, _currentInput.length - 1);
-        }
-      } else if (digit == 'OK') {
-        _checkAnswer();
-      } else if (digit == '-') {
-        if (_currentInput.isEmpty) {
-          _currentInput = '-';
-        }
-      } else if (_currentInput.length < 6) {
-        _currentInput += digit;
-      }
-    });
-  }
 
-  void _checkAnswer() {
-    if (_currentInput.isEmpty) return;
-    
-    final answer = int.tryParse(_currentInput);
-    if (answer == null) {
+    if (digit == 'C') {
       setState(() => _currentInput = '');
       return;
     }
-    
-    // Buscar gota con esa respuesta
-    final matchIndex = _drops.indexWhere((d) => d.operation.answer == answer);
-    
-    if (matchIndex != -1) {
-      // ¡Acierto!
-      final drop = _drops[matchIndex];
-      final bonus = (100 - drop.y).clamp(0, 100).toInt();
-      
-      setState(() {
-        _drops.removeAt(matchIndex);
-        _score += 10 + bonus ~/ 10;
-        _correctAnswers++;
-        _currentInput = '';
-      });
-      
-      // Enviar update
-      _multiplayer.sendGameUpdate(
-        score: _score,
-        lives: 5,
-        correctAnswers: _correctAnswers,
-      );
-    } else {
-      // Fallo
-      setState(() {
-        _score = (_score - 5).clamp(0, 999999);
-        _currentInput = '';
-      });
+    if (digit == 'DEL') {
+      if (_currentInput.isNotEmpty) {
+        setState(() {
+          _currentInput = _currentInput.substring(0, _currentInput.length - 1);
+        });
+      }
+      return;
     }
+    if (digit == 'OK') {
+      _tryAutoValidate();
+      return;
+    }
+    if (digit == '-' || digit == '−') {
+      if (_currentInput.isEmpty) {
+        setState(() => _currentInput = '-');
+      }
+      return;
+    }
+    if (_currentInput.length >= 8) return;
+
+    setState(() {
+      _currentInput += digit;
+    });
+    _tryAutoValidate();
+  }
+
+  /// Autovalidación: acierto al coincidir con cualquier gota; si no, no pasa nada.
+  bool _tryAutoValidate() {
+    if (_currentInput.isEmpty || _currentInput == '-') return false;
+
+    final answer = int.tryParse(_currentInput);
+    if (answer == null) return false;
+
+    final matchIndex = _drops.indexWhere((d) => d.operation.answer == answer);
+
+    if (matchIndex == -1) return false;
+
+    final drop = _drops[matchIndex];
+    final bonus = (100 - drop.y).clamp(0, 100).toInt();
+
+    setState(() {
+      _drops.removeAt(matchIndex);
+      _score += 10 + bonus ~/ 10;
+      _correctAnswers++;
+      _currentInput = '';
+    });
+
+    _multiplayer.sendGameUpdate(
+      score: _score,
+      lives: 5,
+      correctAnswers: _correctAnswers,
+    );
+    return true;
   }
 
   void _endGame() {

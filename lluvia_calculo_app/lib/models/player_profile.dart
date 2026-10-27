@@ -158,7 +158,7 @@ class PlayerProfile extends Equatable {
   int getTierForFamily(OperationFamily family) {
     final stats = familyStats[family];
     if (stats == null) return 1;
-    return stats.maxTierUnlocked.clamp(1, 5);
+    return stats.maxTierUnlocked.clamp(1, OperationDifficulty.maxTier);
   }
 
   /// Obtiene precisión para una familia específica

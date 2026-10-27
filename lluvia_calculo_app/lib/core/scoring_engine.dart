@@ -25,13 +25,18 @@ class AnswerResult {
 /// - Racha actual
 /// - Modo de juego
 class ScoringEngine {
-  // Puntos base por tier
+  // Puntos base por tier (1–10)
   static const Map<int, int> _basePointsByTier = {
     1: 5,
     2: 8,
     3: 12,
     4: 16,
     5: 20,
+    6: 26,
+    7: 32,
+    8: 40,
+    9: 50,
+    10: 60,
   };
 
   // Bonus por respuesta rápida (ms)

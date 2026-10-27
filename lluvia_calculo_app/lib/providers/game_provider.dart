@@ -167,12 +167,24 @@ class GameProvider extends ChangeNotifier {
 
   // ========== INPUT HANDLING ==========
 
-  /// Añade un dígito al buffer de entrada
+  /// Añade un dígito (o signo −) al buffer; si coincide con cualquier gota, valida sola.
   void appendDigit(String digit) {
     if (!_state.isRunning || _state.isPaused) return;
-    
+
+    if (digit == '−' || digit == '-') {
+      if (_inputBuffer.isEmpty) {
+        _inputBuffer = '-';
+        _audio.playTap();
+        notifyListeners();
+      }
+      return;
+    }
+
+    if (_inputBuffer.length >= 8) return;
+
     _inputBuffer += digit;
     _audio.playTap();
+    _tryAutoValidate();
     notifyListeners();
   }
 
@@ -190,32 +202,39 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Envía la respuesta actual
+  /// Envía la respuesta actual (OK). Solo actúa si coincide; si no, no pasa nada.
   void submitAnswer() {
     if (!_state.isRunning || _state.isPaused) return;
-    if (_inputBuffer.isEmpty) return;
-    
-    final answer = int.tryParse(_inputBuffer);
-    if (answer == null) {
-      _inputBuffer = '';
+    if (_inputBuffer.isEmpty || _inputBuffer == '-') return;
+
+    final accepted = _tryAutoValidate();
+    if (!accepted) {
+      // Sin penalización: el jugador puede seguir escribiendo
       notifyListeners();
-      return;
     }
-    
+  }
+
+  /// Si el número escrito coincide con el resultado de cualquier gota cayendo,
+  /// suma puntos, quita la gota y vacía el campo. Devuelve true si acertó.
+  bool _tryAutoValidate() {
+    if (_inputBuffer.isEmpty || _inputBuffer == '-') return false;
+
+    final answer = int.tryParse(_inputBuffer);
+    if (answer == null) return false;
+
     final result = _scoringEngine.evaluateAnswer(
       userAnswer: answer,
       state: _state,
       mode: _state.mode,
     );
-    
+
     if (result.correct && result.hitDrop != null) {
       _handleCorrectAnswer(result);
-    } else {
-      _handleIncorrectAnswer(result);
+      _inputBuffer = '';
+      notifyListeners();
+      return true;
     }
-    
-    _inputBuffer = '';
-    notifyListeners();
+    return false;
   }
 
   // ========== GAME LOOP ==========
@@ -308,13 +327,24 @@ class GameProvider extends ChangeNotifier {
     // Determinar tier basado en modo adaptativo
     int tier = _state.currentTier;
     
-    // En modo aprendizaje, variar tier según params adaptativos
+    // En modo aprendizaje, variar tier según params adaptativos (hasta nivel 10)
     if (_state.mode == GameMode.aprendizaje) {
-      if (_adaptiveParams.shouldIncreaseDifficulty && tier < 5) {
-        tier = min(5, tier + 1);
+      if (_adaptiveParams.shouldIncreaseDifficulty &&
+          tier < OperationDifficulty.maxTier) {
+        tier = min(OperationDifficulty.maxTier, tier + 1);
         _state = _state.copyWith(currentTier: tier);
       } else if (_adaptiveParams.shouldDecreaseDifficulty && tier > 1) {
         tier = max(1, tier - 1);
+        _state = _state.copyWith(currentTier: tier);
+      }
+    } else {
+      // En el resto de modos, subir tier con el nivel de sesión
+      final levelTier = min(
+        OperationDifficulty.maxTier,
+        max(tier, 1 + (_state.level - 1)),
+      );
+      if (levelTier != tier) {
+        tier = levelTier;
         _state = _state.copyWith(currentTier: tier);
       }
     }
@@ -404,28 +434,6 @@ class GameProvider extends ChangeNotifier {
       lives: _state.lives,
       correctAnswers: _state.correctThisSession,
     );
-  }
-
-  void _handleIncorrectAnswer(AnswerResult result) {
-    _audio.playMiss();
-    
-    _state = _state.copyWith(
-      streak: 0,
-      incorrectThisSession: _state.incorrectThisSession + 1,
-      lastMessage: result.message,
-    );
-    
-    // Actualizar perfil (registrar fallo)
-    if (_currentProfile != null && _state.activeDrops.isNotEmpty) {
-      _currentProfile = _adaptiveEngine.updateProfileAfterAnswer(
-        profile: _currentProfile!,
-        operation: _state.activeDrops.first.operation,
-        correct: false,
-        responseTimeMs: 0,
-      );
-      _updateAdaptiveParams();
-      _saveProfile();
-    }
   }
 
   void _handleMiss(FallingDrop drop) {
@@ -524,11 +532,12 @@ class GameProvider extends ChangeNotifier {
         break;
       case GameMode.porNiveles:
         newLevel = 1 + (_state.score ~/ 120);
-        // Desbloquear tier en modo niveles
-        if (newLevel > _state.level && newLevel <= 5) {
-          _state = _state.copyWith(currentTier: min(5, newLevel));
+        // Desbloquear tier en modo niveles (hasta 10)
+        if (newLevel > _state.level &&
+            newLevel <= OperationDifficulty.maxTier) {
           _state = _state.copyWith(
-            lastMessage: '🎉 ¡Desbloqueado nivel $newLevel!'
+            currentTier: min(OperationDifficulty.maxTier, newLevel),
+            lastMessage: '¡Desbloqueado nivel $newLevel!',
           );
         }
         break;

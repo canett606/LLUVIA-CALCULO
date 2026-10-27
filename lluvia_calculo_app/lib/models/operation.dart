@@ -7,6 +7,7 @@ enum OperationType {
   multiplication,
   division,
   mixed,
+  power, // potencias y raíces exactas (niveles altos)
 }
 
 /// Familias de operaciones (para UI en español)
@@ -19,12 +20,18 @@ enum OperationFamily {
   todas,
 }
 
+/// Límites de dificultad (tiers 1–10)
+class OperationDifficulty {
+  static const int minTier = 1;
+  static const int maxTier = 10;
+}
+
 /// Representa una operación matemática generada
 class Operation extends Equatable {
   final String expression;
   final int answer;
   final OperationType type;
-  final int tier; // 1-5, indica dificultad
+  final int tier; // 1-10, indica dificultad
   final int complexity; // puntos de complejidad para scoring
 
   const Operation({
@@ -46,6 +53,7 @@ class Operation extends Equatable {
       case OperationType.division:
         return OperationFamily.divisiones;
       case OperationType.mixed:
+      case OperationType.power:
         return OperationFamily.mixtas;
     }
   }

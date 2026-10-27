@@ -28,6 +28,7 @@ class _MultiplayerGameScreenState extends State<MultiplayerGameScreen> {
   int _lives = 5;
   int _streak = 0;
   int _correctCount = 0;
+  int _spawnCount = 0;
   Duration _timeRemaining = const Duration(seconds: 90);
   List<FallingDrop> _drops = [];
   String _message = '';
@@ -109,8 +110,11 @@ class _MultiplayerGameScreenState extends State<MultiplayerGameScreen> {
 
   void _spawnDrop() {
     if (_drops.length >= 6) return;
-    
-    final op = _generator.generate(tier: 2, family: OperationFamily.todas);
+
+    // Misma progresión para ambos (seed + contador de spawns compartido)
+    _spawnCount++;
+    final tier = (2 + (_spawnCount ~/ 6)).clamp(1, OperationDifficulty.maxTier);
+    final op = _generator.generate(tier: tier, family: OperationFamily.todas);
     final x = 0.1 + Random().nextDouble() * 0.8;
     
     final drop = FallingDrop(
@@ -164,9 +168,20 @@ class _MultiplayerGameScreenState extends State<MultiplayerGameScreen> {
 
   void _appendDigit(String digit) {
     if (_isFinished) return;
+
+    if (digit == '−' || digit == '-') {
+      if (_inputBuffer.isEmpty) {
+        setState(() => _inputBuffer = '-');
+      }
+      return;
+    }
+
+    if (_inputBuffer.length >= 8) return;
+
     setState(() {
       _inputBuffer += digit;
     });
+    _tryAutoValidate();
   }
 
   void _backspace() {
@@ -184,15 +199,17 @@ class _MultiplayerGameScreenState extends State<MultiplayerGameScreen> {
   }
 
   void _submit() {
-    if (_inputBuffer.isEmpty || _isFinished) return;
-    
+    // OK solo acepta si coincide; si no, no pasa nada
+    _tryAutoValidate();
+  }
+
+  /// Autovalidación: si el número coincide con cualquier gota cayendo, suma y vacía.
+  bool _tryAutoValidate() {
+    if (_inputBuffer.isEmpty || _inputBuffer == '-' || _isFinished) return false;
+
     final answer = int.tryParse(_inputBuffer);
-    if (answer == null) {
-      _clear();
-      return;
-    }
-    
-    // Buscar drop con esa respuesta
+    if (answer == null) return false;
+
     FallingDrop? hitDrop;
     for (final drop in _drops) {
       if (drop.operation.answer == answer) {
@@ -200,28 +217,20 @@ class _MultiplayerGameScreenState extends State<MultiplayerGameScreen> {
         break;
       }
     }
-    
-    if (hitDrop != null) {
-      // Acierto
-      final points = 10 + (_streak * 2);
-      setState(() {
-        _score += points;
-        _streak++;
-        _correctCount++;
-        _drops = _drops.where((d) => d.id != hitDrop!.id).toList();
-        _message = _streak >= 5 ? '🔥 ¡Racha x$_streak!' : '¡+$points!';
-      });
-      context.read<GameProvider>().audio.playHit();
-    } else {
-      // Fallo
-      setState(() {
-        _streak = 0;
-        _message = 'Incorrecto';
-      });
-      context.read<GameProvider>().audio.playMiss();
-    }
-    
-    _clear();
+
+    if (hitDrop == null) return false;
+
+    final points = 10 + (_streak * 2);
+    setState(() {
+      _score += points;
+      _streak++;
+      _correctCount++;
+      _drops = _drops.where((d) => d.id != hitDrop!.id).toList();
+      _message = _streak >= 5 ? '¡Racha x$_streak!' : '¡+$points!';
+      _inputBuffer = '';
+    });
+    context.read<GameProvider>().audio.playHit();
+    return true;
   }
 
   void _sendUpdate() {
