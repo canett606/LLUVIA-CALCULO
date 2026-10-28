@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../models/operation.dart';
 import '../models/player_profile.dart';
 import '../models/game_state.dart';
+import '../models/multiplication_practice.dart';
 import '../core/operation_generator.dart';
 import '../core/adaptive_engine.dart';
 import '../core/scoring_engine.dart';
@@ -29,6 +30,7 @@ class GameProvider extends ChangeNotifier {
   GameState _state = GameState.initial();
   PlayerProfile? _currentProfile;
   AdaptiveParameters _adaptiveParams = AdaptiveParameters.forBeginner();
+  MultiplicationPractice _multiplicationPractice = const MultiplicationPractice();
   
   Timer? _gameTimer;
   Timer? _spawnTimer;
@@ -61,6 +63,7 @@ class GameProvider extends ChangeNotifier {
   MultiplayerService get multiplayer => _multiplayer;
   AudioService get audio => _audio;
   OperationGenerator get generator => _generator;
+  MultiplicationPractice get multiplicationPractice => _multiplicationPractice;
 
   /// Inicializa el provider cargando datos guardados
   Future<void> initialize() async {
@@ -73,6 +76,10 @@ class GameProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Audio no disponible: $e');
     }
+
+    final settings = await _storage.getSettings();
+    _multiplicationPractice = MultiplicationPractice.fromSettings(settings);
+    _generator.multiplicationPractice = _multiplicationPractice;
 
     try {
       final profile = await _storage.getCurrentPlayer();
@@ -113,6 +120,53 @@ class GameProvider extends ChangeNotifier {
   void setFamily(OperationFamily family) {
     _state = _state.copyWith(selectedFamily: family);
     notifyListeners();
+  }
+
+  /// Limita las multiplicaciones a las tablas del 1 al 10, aunque suba el nivel.
+  void setOnlyTimesTables(bool value) {
+    _applyMultiplicationPractice(
+      _multiplicationPractice.copyWith(onlyTables1to10: value),
+    );
+  }
+
+  /// Añade o quita una tabla (1–10) en la que hay que insistir.
+  void toggleFocusTable(int table) {
+    if (table < 1 || table > 10) return;
+    final next = Set<int>.from(_multiplicationPractice.focusTables);
+    if (!next.add(table)) next.remove(table);
+    _applyMultiplicationPractice(
+      _multiplicationPractice.copyWith(focusTables: next),
+    );
+  }
+
+  Future<void>? _practiceSave;
+
+  void _applyMultiplicationPractice(MultiplicationPractice practice) {
+    _multiplicationPractice = practice;
+    _generator.multiplicationPractice = practice;
+    notifyListeners();
+    final previous = _practiceSave;
+    _practiceSave = _persistMultiplicationPractice(practice, previous);
+  }
+
+  /// Una sola cola de escritura: si no, dos toques seguidos se pisan el ajuste.
+  Future<void> _persistMultiplicationPractice(
+    MultiplicationPractice practice,
+    Future<void>? previous,
+  ) async {
+    if (previous != null) {
+      try {
+        await previous;
+      } catch (_) {}
+    }
+    await _storage.saveSetting(
+      MultiplicationPractice.onlyKey,
+      practice.onlyTables1to10,
+    );
+    await _storage.saveSetting(
+      MultiplicationPractice.focusKey,
+      practice.sortedFocus,
+    );
   }
 
   /// Inicia una nueva partida.

@@ -1,4 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+
+/// En iPhone/Android un Focus con autofocus crea un input oculto y se come los toques.
+bool get physicalKeyboardEnabled {
+  const touch = {TargetPlatform.iOS, TargetPlatform.android};
+  return !touch.contains(defaultTargetPlatform);
+}
 
 /// Acción de una tecla física.
 /// [side] 1 = teclado numérico (jugador A), 2 = fila de números (jugador B).

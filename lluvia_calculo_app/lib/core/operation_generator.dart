@@ -1,6 +1,7 @@
 import 'dart:math';
 import '../models/operation.dart';
 import '../models/player_profile.dart';
+import '../models/multiplication_practice.dart';
 
 /// Generador procedural de operaciones matemáticas con ALTA VARIEDAD.
 ///
@@ -11,6 +12,9 @@ class OperationGenerator {
   final Random _random;
   final Set<String> _usedExpressions = {};
   int _sessionOperationCount = 0;
+
+  /// Opciones de tablas. Vacío = la multiplicación sigue el nivel.
+  MultiplicationPractice multiplicationPractice = const MultiplicationPractice();
 
   static const int maxTier = OperationDifficulty.maxTier;
 
@@ -380,7 +384,47 @@ class OperationGenerator {
   }
 
   // ========== MULTIPLICACIONES ==========
+
+  /// Tabla del 1 al 10, con más peso en [MultiplicationPractice.focusTables].
+  /// Devuelve null si hay que usar la dificultad del nivel.
+  Operation? _timesTableOrNull() {
+    final focus = multiplicationPractice.sortedFocus;
+    final only = multiplicationPractice.onlyTables1to10;
+    if (!only && focus.isEmpty) return null;
+
+    final emphasize = focus.isNotEmpty && _random.nextDouble() < 0.8;
+    late final int a;
+    late final int b;
+    if (emphasize) {
+      final table = focus[_random.nextInt(focus.length)];
+      final other = _random.nextInt(10) + 1;
+      if (_random.nextBool()) {
+        a = table;
+        b = other;
+      } else {
+        a = other;
+        b = table;
+      }
+    } else if (only) {
+      a = _random.nextInt(10) + 1;
+      b = _random.nextInt(10) + 1;
+    } else {
+      return null;
+    }
+
+    return Operation(
+      expression: '$a × $b',
+      answer: a * b,
+      type: OperationType.multiplication,
+      tier: 2,
+      complexity: 2,
+    );
+  }
+
   Operation _generateMultiplication(int tier) {
+    final fromTables = _timesTableOrNull();
+    if (fromTables != null) return fromTables;
+
     int a, b;
 
     switch (tier) {
@@ -431,6 +475,9 @@ class OperationGenerator {
   }
 
   Operation _generateMultiplicationWithOffset(int tier, int offset) {
+    final fromTables = _timesTableOrNull();
+    if (fromTables != null) return fromTables;
+
     final a = (offset % 10) + tier;
     final b = ((offset + 3) % 10) + 1;
 

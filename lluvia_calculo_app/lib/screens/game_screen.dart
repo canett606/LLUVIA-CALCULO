@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../core/physical_keyboard.dart';
 import '../providers/game_provider.dart';
 import '../models/game_state.dart';
+import '../models/multiplication_practice.dart';
 import '../models/operation.dart';
 import '../models/player_profile.dart';
 import '../widgets/falling_drop.dart';
@@ -122,10 +123,11 @@ class _GameScreenState extends State<GameScreen> {
       final family = context.read<GameProvider>().state.selectedFamily;
       return LocalDuelScreen(
         family: family,
+        practice: context.read<GameProvider>().multiplicationPractice,
         onExit: () {
           if (!mounted) return;
           setState(() => _duelActive = false);
-          _focus.requestFocus();
+          if (_usePhysicalKeyboard) _focus.requestFocus();
         },
       );
     }
@@ -329,8 +331,11 @@ class _MenuLayout extends StatelessWidget {
               mode: state.mode,
               family: state.selectedFamily,
               profile: profile,
+              practice: provider.multiplicationPractice,
               onModeChanged: provider.setMode,
               onFamilyChanged: provider.setFamily,
+              onToggleTables: provider.setOnlyTimesTables,
+              onToggleFocus: provider.toggleFocusTable,
               onSettings: () => _showSettingsSheet(context, provider),
             ),
           ),
@@ -364,27 +369,50 @@ class _MenuLayout extends StatelessWidget {
   void _showSettingsSheet(BuildContext context, GameProvider provider) {
     showModalBottomSheet(
       context: context,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SwitchListTile(
-                title: const Text('Sonido'),
-                value: provider.soundEnabled,
-                onChanged: (_) => provider.toggleSound(),
-              ),
-              ListTile(
-                leading: const Icon(Icons.person),
-                title: const Text('Cambiar jugador'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.of(context).pushReplacementNamed('/welcome');
-                },
-              ),
-            ],
-          ),
+      isScrollControlled: true,
+      builder: (ctx) => _OptionsSheet(
+        onChangePlayer: () {
+          Navigator.pop(ctx);
+          Navigator.of(context).pushReplacementNamed('/welcome');
+        },
+      ),
+    );
+  }
+}
+
+class _OptionsSheet extends StatelessWidget {
+  final VoidCallback onChangePlayer;
+
+  const _OptionsSheet({required this.onChangePlayer});
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<GameProvider>();
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SwitchListTile(
+              title: const Text('Sonido'),
+              value: provider.soundEnabled,
+              onChanged: (_) => provider.toggleSound(),
+            ),
+            const SizedBox(height: 8),
+            _TableOptions(
+              practice: provider.multiplicationPractice,
+              onToggleTables: provider.setOnlyTimesTables,
+              onToggleFocus: provider.toggleFocusTable,
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Cambiar jugador'),
+              onTap: onChangePlayer,
+            ),
+          ],
         ),
       ),
     );
@@ -461,16 +489,22 @@ class _StartScreen extends StatelessWidget {
   final GameMode mode;
   final OperationFamily family;
   final PlayerProfile? profile;
+  final MultiplicationPractice practice;
   final void Function(GameMode) onModeChanged;
   final void Function(OperationFamily) onFamilyChanged;
+  final void Function(bool) onToggleTables;
+  final void Function(int) onToggleFocus;
   final VoidCallback onSettings;
 
   const _StartScreen({
     required this.mode,
     required this.family,
     required this.profile,
+    required this.practice,
     required this.onModeChanged,
     required this.onFamilyChanged,
+    required this.onToggleTables,
+    required this.onToggleFocus,
     required this.onSettings,
   });
 
@@ -488,8 +522,7 @@ class _StartScreen extends StatelessWidget {
               child: Text('👋 ${profile?.name ?? "Jugador"}',
                 style: const TextStyle(color: Colors.white70, fontSize: 16)),
             ),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
+            _TapTarget(
               onTap: onSettings,
               child: const Padding(
                 padding: EdgeInsets.all(8),
@@ -541,6 +574,12 @@ class _StartScreen extends StatelessWidget {
                   selected: family == f,
                   onTap: () => onFamilyChanged(f),
                 )).toList(),
+              ),
+              const SizedBox(height: 16),
+              _TableOptions(
+                practice: practice,
+                onToggleTables: onToggleTables,
+                onToggleFocus: onToggleFocus,
               ),
               const SizedBox(height: 12),
               Text(_getModeDescription(mode),
@@ -603,6 +642,58 @@ class _StartScreen extends StatelessWidget {
   }
 }
 
+class _TableOptions extends StatelessWidget {
+  final MultiplicationPractice practice;
+  final void Function(bool) onToggleTables;
+  final void Function(int) onToggleFocus;
+
+  const _TableOptions({
+    required this.practice,
+    required this.onToggleTables,
+    required this.onToggleFocus,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Opciones de tablas', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+        const SizedBox(height: 8),
+        _ChoiceChip(
+          label: 'Solo tablas del 1 al 10',
+          selected: practice.onlyTables1to10,
+          onTap: () => onToggleTables(!practice.onlyTables1to10),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Insistir en estas tablas',
+          style: TextStyle(color: Colors.grey[400], fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (var n = 1; n <= 10; n++)
+              _ChoiceChip(
+                label: '×$n',
+                selected: practice.focusTables.contains(n),
+                onTap: () => onToggleFocus(n),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          practice.summary,
+          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
+
 class _ChoiceChip extends StatelessWidget {
   final String label;
   final bool selected;
@@ -616,26 +707,42 @@ class _ChoiceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected ? const Color(0xFF62D6FF) : Colors.grey[800],
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? Colors.black87 : Colors.white,
-              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-              fontSize: 14,
-            ),
+    // onPointerDown: en iPhone Safari el onTap dentro de un scroll no llega.
+    return _TapTarget(
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 44),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF62D6FF) : Colors.grey[800],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.black87 : Colors.white,
+            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 14,
           ),
         ),
       ),
+    );
+  }
+}
+
+/// onPointerDown: en iPhone Safari el onTap dentro de un scroll no llega.
+class _TapTarget extends StatelessWidget {
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _TapTarget({required this.onTap, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => onTap(),
+      child: child,
     );
   }
 }

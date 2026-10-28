@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../core/operation_generator.dart';
 import '../core/physical_keyboard.dart';
 import '../models/game_state.dart';
+import '../models/multiplication_practice.dart';
 import '../models/operation.dart';
 import '../providers/game_provider.dart';
 import '../widgets/falling_drop.dart';
@@ -17,11 +18,13 @@ import '../widgets/numeric_keypad.dart';
 /// Tacto: dos teclados. Teclado físico: A en el numérico, B en la fila 1–0.
 class LocalDuelScreen extends StatefulWidget {
   final OperationFamily family;
+  final MultiplicationPractice practice;
   final VoidCallback onExit;
 
   const LocalDuelScreen({
     super.key,
     required this.family,
+    this.practice = const MultiplicationPractice(),
     required this.onExit,
   });
 
@@ -51,11 +54,16 @@ class _LocalDuelScreenState extends State<LocalDuelScreen> {
   @override
   void initState() {
     super.initState();
+    _generator.multiplicationPractice = widget.practice;
+    if (physicalKeyboardEnabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focus.requestFocus();
+      });
+    }
     _tick = Timer.periodic(const Duration(milliseconds: 16), (_) => _advance());
     _spawn = Timer.periodic(const Duration(milliseconds: 2400), (_) => _spawnDrop());
     _clock = Timer.periodic(const Duration(seconds: 1), (_) => _countdown());
     _spawnDrop();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
   }
 
   @override
@@ -220,11 +228,7 @@ class _LocalDuelScreenState extends State<LocalDuelScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      focusNode: _focus,
-      autofocus: true,
-      onKeyEvent: _onKey,
-      child: Scaffold(
+    final scaffold = Scaffold(
         resizeToAvoidBottomInset: false,
         body: Container(
           decoration: const BoxDecoration(
@@ -244,7 +248,13 @@ class _LocalDuelScreenState extends State<LocalDuelScreen> {
             ),
           ),
         ),
-      ),
+    );
+    if (!physicalKeyboardEnabled) return scaffold;
+    return Focus(
+      focusNode: _focus,
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: scaffold,
     );
   }
 

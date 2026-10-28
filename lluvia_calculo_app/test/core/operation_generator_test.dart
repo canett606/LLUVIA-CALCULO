@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lluvia_calculo/core/operation_generator.dart';
+import 'package:lluvia_calculo/models/multiplication_practice.dart';
 import 'package:lluvia_calculo/models/operation.dart';
 import 'package:lluvia_calculo/models/player_profile.dart';
 
@@ -152,6 +153,39 @@ void main() {
           expect(int.parse(parts[0]) * int.parse(parts[1]), equals(op.answer));
         }
         expect(hasTwoDigit, isTrue);
+      });
+
+      test('solo tablas del 1 al 10 aunque el nivel sea alto', () {
+        generator.multiplicationPractice = const MultiplicationPractice(
+          onlyTables1to10: true,
+        );
+        for (int i = 0; i < 40; i++) {
+          final op = generator.generate(tier: 9, family: OperationFamily.multiplicaciones);
+          final parts = op.expression.split(' × ');
+          final a = int.parse(parts[0]);
+          final b = int.parse(parts[1]);
+          expect(a, inInclusiveRange(1, 10));
+          expect(b, inInclusiveRange(1, 10));
+          expect(a * b, op.answer);
+        }
+      });
+
+      test('insiste en las tablas del 7, 8 y 9', () {
+        generator.multiplicationPractice = const MultiplicationPractice(
+          onlyTables1to10: true,
+          focusTables: {7, 8, 9},
+        );
+        var focused = 0;
+        for (int i = 0; i < 40; i++) {
+          final op = generator.generate(tier: 8, family: OperationFamily.multiplicaciones);
+          final parts = op.expression.split(' × ');
+          final a = int.parse(parts[0]);
+          final b = int.parse(parts[1]);
+          expect(a, inInclusiveRange(1, 10));
+          expect(b, inInclusiveRange(1, 10));
+          if ({7, 8, 9}.contains(a) || {7, 8, 9}.contains(b)) focused++;
+        }
+        expect(focused, greaterThan(24));
       });
 
       test('tier 9+ puede generar potencias o raíces', () {
