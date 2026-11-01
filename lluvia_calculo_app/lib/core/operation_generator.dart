@@ -386,13 +386,15 @@ class OperationGenerator {
   // ========== MULTIPLICACIONES ==========
 
   /// Tabla del 1 al 10, con más peso en [MultiplicationPractice.focusTables].
+  /// Si [MultiplicationPractice.onlySelectedTables] está activo, solo esas.
   /// Devuelve null si hay que usar la dificultad del nivel.
   Operation? _timesTableOrNull() {
     final focus = multiplicationPractice.sortedFocus;
     final only = multiplicationPractice.onlyTables1to10;
+    final exclusive = multiplicationPractice.hasExclusiveFocus;
     if (!only && focus.isEmpty) return null;
 
-    final emphasize = focus.isNotEmpty && _random.nextDouble() < 0.8;
+    final emphasize = exclusive || (focus.isNotEmpty && _random.nextDouble() < 0.8);
     late final int a;
     late final int b;
     if (emphasize) {

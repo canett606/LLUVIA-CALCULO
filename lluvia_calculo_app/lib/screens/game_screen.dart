@@ -338,6 +338,7 @@ class _MenuLayout extends StatelessWidget {
               onModeChanged: provider.setMode,
               onFamilyChanged: provider.setFamily,
               onToggleTables: provider.setOnlyTimesTables,
+              onToggleOnlySelected: provider.setOnlySelectedTables,
               onToggleFocus: provider.toggleFocusTable,
               onFallPace: provider.setFallPace,
               onSettings: () => _showSettingsSheet(context, provider),
@@ -408,6 +409,7 @@ class _OptionsSheet extends StatelessWidget {
             _TableOptions(
               practice: provider.multiplicationPractice,
               onToggleTables: provider.setOnlyTimesTables,
+              onToggleOnlySelected: provider.setOnlySelectedTables,
               onToggleFocus: provider.toggleFocusTable,
             ),
             const SizedBox(height: 16),
@@ -503,6 +505,7 @@ class _StartScreen extends StatelessWidget {
   final void Function(GameMode) onModeChanged;
   final void Function(OperationFamily) onFamilyChanged;
   final void Function(bool) onToggleTables;
+  final void Function(bool) onToggleOnlySelected;
   final void Function(int) onToggleFocus;
   final void Function(double) onFallPace;
   final VoidCallback onSettings;
@@ -516,6 +519,7 @@ class _StartScreen extends StatelessWidget {
     required this.onModeChanged,
     required this.onFamilyChanged,
     required this.onToggleTables,
+    required this.onToggleOnlySelected,
     required this.onToggleFocus,
     required this.onFallPace,
     required this.onSettings,
@@ -592,6 +596,7 @@ class _StartScreen extends StatelessWidget {
               _TableOptions(
                 practice: practice,
                 onToggleTables: onToggleTables,
+                onToggleOnlySelected: onToggleOnlySelected,
                 onToggleFocus: onToggleFocus,
               ),
               const SizedBox(height: 16),
@@ -705,11 +710,13 @@ class _FallSpeedOptions extends StatelessWidget {
 class _TableOptions extends StatelessWidget {
   final MultiplicationPractice practice;
   final void Function(bool) onToggleTables;
+  final void Function(bool) onToggleOnlySelected;
   final void Function(int) onToggleFocus;
 
   const _TableOptions({
     required this.practice,
     required this.onToggleTables,
+    required this.onToggleOnlySelected,
     required this.onToggleFocus,
   });
 
@@ -727,7 +734,7 @@ class _TableOptions extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Insistir en estas tablas',
+          practice.onlySelectedTables ? 'Solo estas tablas' : 'Insistir en estas tablas',
           style: TextStyle(color: Colors.grey[400], fontSize: 12),
         ),
         const SizedBox(height: 8),
@@ -742,6 +749,12 @@ class _TableOptions extends StatelessWidget {
                 onTap: () => onToggleFocus(n),
               ),
           ],
+        ),
+        const SizedBox(height: 8),
+        _ChoiceChip(
+          label: 'Solo las tablas seleccionadas',
+          selected: practice.onlySelectedTables,
+          onTap: () => onToggleOnlySelected(!practice.onlySelectedTables),
         ),
         const SizedBox(height: 8),
         Text(

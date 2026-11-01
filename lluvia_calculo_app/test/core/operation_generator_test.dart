@@ -188,6 +188,24 @@ void main() {
         expect(focused, greaterThan(24));
       });
 
+      test('solo las tablas del 7, 8 y 9 aunque el nivel sea alto', () {
+        generator.multiplicationPractice = const MultiplicationPractice(
+          onlySelectedTables: true,
+          focusTables: {7, 8, 9},
+        );
+        const tables = {7, 8, 9};
+        for (int i = 0; i < 40; i++) {
+          final op = generator.generate(tier: 9, family: OperationFamily.multiplicaciones);
+          final parts = op.expression.split(' × ');
+          final a = int.parse(parts[0]);
+          final b = int.parse(parts[1]);
+          expect(a, inInclusiveRange(1, 10));
+          expect(b, inInclusiveRange(1, 10));
+          expect(tables.contains(a) || tables.contains(b), isTrue);
+          expect(a * b, op.answer);
+        }
+      });
+
       test('tier 9+ puede generar potencias o raíces', () {
         bool found = false;
         for (int i = 0; i < 40; i++) {

@@ -133,6 +133,13 @@ class GameProvider extends ChangeNotifier {
     );
   }
 
+  /// Si está activo, las multiplicaciones salen solo de las tablas marcadas.
+  void setOnlySelectedTables(bool value) {
+    _applyMultiplicationPractice(
+      _multiplicationPractice.copyWith(onlySelectedTables: value),
+    );
+  }
+
   /// Añade o quita una tabla (1–10) en la que hay que insistir.
   void toggleFocusTable(int table) {
     if (table < 1 || table > 10) return;
@@ -187,6 +194,10 @@ class GameProvider extends ChangeNotifier {
     await _storage.saveSetting(
       MultiplicationPractice.onlyKey,
       practice.onlyTables1to10,
+    );
+    await _storage.saveSetting(
+      MultiplicationPractice.onlySelectedKey,
+      practice.onlySelectedTables,
     );
     await _storage.saveSetting(
       MultiplicationPractice.focusKey,
