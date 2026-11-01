@@ -79,7 +79,7 @@ class _GameScreenState extends State<GameScreen> {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    final action = PhysicalKeyAction.fromKey(event.logicalKey);
+    final action = PhysicalKeyAction.fromEvent(event);
     if (action == null) return KeyEventResult.ignored;
 
     final provider = context.read<GameProvider>();

@@ -52,6 +52,15 @@ class PhysicalKeyAction {
     LogicalKeyboardKey.numpad9: '9',
   };
 
+  /// La tecla física del bloque numérico manda. Con Bloq Num apagado el
+  /// navegador dice que es Fin, Inicio o una flecha, y si no miramos el
+  /// código físico el número no se escribe.
+  static PhysicalKeyAction? fromEvent(KeyEvent event) {
+    final fromPad = _fromNumpad(event.physicalKey);
+    if (fromPad != null) return fromPad;
+    return fromKey(event.logicalKey);
+  }
+
   static PhysicalKeyAction? fromKey(LogicalKeyboardKey key) {
     if (key == LogicalKeyboardKey.escape) {
       return const PhysicalKeyAction(quit: true);
@@ -81,6 +90,31 @@ class PhysicalKeyAction {
     if (row != null) return PhysicalKeyAction(digit: row, side: 2);
     final pad = _pad[key];
     if (pad != null) return PhysicalKeyAction(digit: pad, side: 1);
+    return null;
+  }
+
+  static final Map<PhysicalKeyboardKey, String> _padPhysical = {
+    PhysicalKeyboardKey.numpad0: '0',
+    PhysicalKeyboardKey.numpad1: '1',
+    PhysicalKeyboardKey.numpad2: '2',
+    PhysicalKeyboardKey.numpad3: '3',
+    PhysicalKeyboardKey.numpad4: '4',
+    PhysicalKeyboardKey.numpad5: '5',
+    PhysicalKeyboardKey.numpad6: '6',
+    PhysicalKeyboardKey.numpad7: '7',
+    PhysicalKeyboardKey.numpad8: '8',
+    PhysicalKeyboardKey.numpad9: '9',
+  };
+
+  static PhysicalKeyAction? _fromNumpad(PhysicalKeyboardKey key) {
+    final digit = _padPhysical[key];
+    if (digit != null) return PhysicalKeyAction(digit: digit, side: 1);
+    if (key == PhysicalKeyboardKey.numpadEnter) {
+      return const PhysicalKeyAction(submit: true, side: 1);
+    }
+    if (key == PhysicalKeyboardKey.numpadSubtract) {
+      return const PhysicalKeyAction(digit: '-', side: 1);
+    }
     return null;
   }
 }

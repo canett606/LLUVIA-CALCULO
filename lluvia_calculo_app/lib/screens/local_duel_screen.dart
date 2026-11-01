@@ -200,7 +200,7 @@ class _LocalDuelScreenState extends State<LocalDuelScreen> {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    final action = PhysicalKeyAction.fromKey(event.logicalKey);
+    final action = PhysicalKeyAction.fromEvent(event);
     if (action == null) return KeyEventResult.ignored;
     if (action.quit) {
       _exit();
