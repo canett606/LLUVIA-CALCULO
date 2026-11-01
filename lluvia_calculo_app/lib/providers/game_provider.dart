@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../models/operation.dart';
 import '../models/player_profile.dart';
 import '../models/game_state.dart';
+import '../models/fall_pace.dart';
 import '../models/multiplication_practice.dart';
 import '../core/operation_generator.dart';
 import '../core/adaptive_engine.dart';
@@ -31,6 +32,7 @@ class GameProvider extends ChangeNotifier {
   PlayerProfile? _currentProfile;
   AdaptiveParameters _adaptiveParams = AdaptiveParameters.forBeginner();
   MultiplicationPractice _multiplicationPractice = const MultiplicationPractice();
+  FallPace _fallPace = FallPace.normal;
   
   Timer? _gameTimer;
   Timer? _spawnTimer;
@@ -64,6 +66,7 @@ class GameProvider extends ChangeNotifier {
   AudioService get audio => _audio;
   OperationGenerator get generator => _generator;
   MultiplicationPractice get multiplicationPractice => _multiplicationPractice;
+  FallPace get fallPace => _fallPace;
 
   /// Inicializa el provider cargando datos guardados
   Future<void> initialize() async {
@@ -80,6 +83,7 @@ class GameProvider extends ChangeNotifier {
     final settings = await _storage.getSettings();
     _multiplicationPractice = MultiplicationPractice.fromSettings(settings);
     _generator.multiplicationPractice = _multiplicationPractice;
+    _fallPace = FallPace.fromSettings(settings);
 
     try {
       final profile = await _storage.getCurrentPlayer();
@@ -137,6 +141,27 @@ class GameProvider extends ChangeNotifier {
     _applyMultiplicationPractice(
       _multiplicationPractice.copyWith(focusTables: next),
     );
+  }
+
+  /// Ritmo de caída. Por debajo de normal hay más tiempo para pensar.
+  void setFallPace(double factor) {
+    final pace = FallPace.nearest(factor);
+    if (pace == _fallPace) return;
+    _fallPace = pace;
+    notifyListeners();
+    final previous = _paceSave;
+    _paceSave = _persistFallPace(pace, previous);
+  }
+
+  Future<void>? _paceSave;
+
+  Future<void> _persistFallPace(FallPace pace, Future<void>? previous) async {
+    if (previous != null) {
+      try {
+        await previous;
+      } catch (_) {}
+    }
+    await _storage.saveSetting(FallPace.settingsKey, pace.factor);
   }
 
   Future<void>? _practiceSave;
@@ -325,9 +350,10 @@ class GameProvider extends ChangeNotifier {
   }
 
   void _startSpawnTimer() {
-    final intervalMs = _state.mode == GameMode.infinito
+    final baseInterval = _state.mode == GameMode.infinito
         ? 3200
-        : _adaptiveParams.spawnIntervalMs.round();
+        : _adaptiveParams.spawnIntervalMs;
+    final intervalMs = _fallPace.applyInterval(baseInterval);
     _spawnTimer = Timer.periodic(
       Duration(milliseconds: intervalMs),
       (_) {
@@ -465,7 +491,9 @@ class GameProvider extends ChangeNotifier {
     // Ajustar por nivel y parámetros adaptativos
     final speedMultiplier = _adaptiveParams.speedMultiplier;
     final levelBonus = (_state.level - 1) * 0.02;
-    final speed = baseSpeed * speedMultiplier + levelBonus + _random.nextDouble() * 0.03;
+    final speed = _fallPace.applySpeed(
+      baseSpeed * speedMultiplier + levelBonus + _random.nextDouble() * 0.03,
+    );
     
     // Posición X aleatoria evitando bordes
     final x = 0.1 + _random.nextDouble() * 0.8;

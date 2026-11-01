@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../core/operation_generator.dart';
 import '../core/physical_keyboard.dart';
+import '../models/fall_pace.dart';
 import '../models/game_state.dart';
 import '../models/multiplication_practice.dart';
 import '../models/operation.dart';
@@ -19,12 +20,14 @@ import '../widgets/numeric_keypad.dart';
 class LocalDuelScreen extends StatefulWidget {
   final OperationFamily family;
   final MultiplicationPractice practice;
+  final FallPace fallPace;
   final VoidCallback onExit;
 
   const LocalDuelScreen({
     super.key,
     required this.family,
     this.practice = const MultiplicationPractice(),
+    this.fallPace = FallPace.normal,
     required this.onExit,
   });
 
@@ -61,7 +64,10 @@ class _LocalDuelScreenState extends State<LocalDuelScreen> {
       });
     }
     _tick = Timer.periodic(const Duration(milliseconds: 16), (_) => _advance());
-    _spawn = Timer.periodic(const Duration(milliseconds: 2400), (_) => _spawnDrop());
+    _spawn = Timer.periodic(
+      Duration(milliseconds: widget.fallPace.applyInterval(2400)),
+      (_) => _spawnDrop(),
+    );
     _clock = Timer.periodic(const Duration(seconds: 1), (_) => _countdown());
     _spawnDrop();
   }
@@ -123,7 +129,7 @@ class _LocalDuelScreenState extends State<LocalDuelScreen> {
         operation: op,
         x: 0.12 + _random.nextDouble() * 0.76,
         y: -0.08,
-        speed: 0.12 + _random.nextDouble() * 0.04,
+        speed: widget.fallPace.applySpeed(0.12 + _random.nextDouble() * 0.04),
         spawnedAt: DateTime.now(),
       ));
     });

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../core/physical_keyboard.dart';
 import '../providers/game_provider.dart';
+import '../models/fall_pace.dart';
 import '../models/game_state.dart';
 import '../models/multiplication_practice.dart';
 import '../models/operation.dart';
@@ -124,6 +125,7 @@ class _GameScreenState extends State<GameScreen> {
       return LocalDuelScreen(
         family: family,
         practice: context.read<GameProvider>().multiplicationPractice,
+        fallPace: context.read<GameProvider>().fallPace,
         onExit: () {
           if (!mounted) return;
           setState(() => _duelActive = false);
@@ -332,10 +334,12 @@ class _MenuLayout extends StatelessWidget {
               family: state.selectedFamily,
               profile: profile,
               practice: provider.multiplicationPractice,
+              fallPace: provider.fallPace,
               onModeChanged: provider.setMode,
               onFamilyChanged: provider.setFamily,
               onToggleTables: provider.setOnlyTimesTables,
               onToggleFocus: provider.toggleFocusTable,
+              onFallPace: provider.setFallPace,
               onSettings: () => _showSettingsSheet(context, provider),
             ),
           ),
@@ -405,6 +409,11 @@ class _OptionsSheet extends StatelessWidget {
               practice: provider.multiplicationPractice,
               onToggleTables: provider.setOnlyTimesTables,
               onToggleFocus: provider.toggleFocusTable,
+            ),
+            const SizedBox(height: 16),
+            _FallSpeedOptions(
+              pace: provider.fallPace,
+              onSelected: provider.setFallPace,
             ),
             const SizedBox(height: 8),
             ListTile(
@@ -490,10 +499,12 @@ class _StartScreen extends StatelessWidget {
   final OperationFamily family;
   final PlayerProfile? profile;
   final MultiplicationPractice practice;
+  final FallPace fallPace;
   final void Function(GameMode) onModeChanged;
   final void Function(OperationFamily) onFamilyChanged;
   final void Function(bool) onToggleTables;
   final void Function(int) onToggleFocus;
+  final void Function(double) onFallPace;
   final VoidCallback onSettings;
 
   const _StartScreen({
@@ -501,10 +512,12 @@ class _StartScreen extends StatelessWidget {
     required this.family,
     required this.profile,
     required this.practice,
+    required this.fallPace,
     required this.onModeChanged,
     required this.onFamilyChanged,
     required this.onToggleTables,
     required this.onToggleFocus,
+    required this.onFallPace,
     required this.onSettings,
   });
 
@@ -581,6 +594,11 @@ class _StartScreen extends StatelessWidget {
                 onToggleTables: onToggleTables,
                 onToggleFocus: onToggleFocus,
               ),
+              const SizedBox(height: 16),
+              _FallSpeedOptions(
+                pace: fallPace,
+                onSelected: onFallPace,
+              ),
               const SizedBox(height: 12),
               Text(_getModeDescription(mode),
                 style: TextStyle(color: Colors.grey[400], fontSize: 13),
@@ -639,6 +657,48 @@ class _StartScreen extends StatelessWidget {
       case GameMode.infinito: return 'No para. Decid el resultado en voz alta. Pausa y Salir.';
       case GameMode.dueloLocal: return 'Dos teclados. A: numérico. B: teclas 1-0. 90 segundos.';
     }
+  }
+}
+
+class _FallSpeedOptions extends StatelessWidget {
+  final FallPace pace;
+  final void Function(double) onSelected;
+
+  const _FallSpeedOptions({
+    required this.pace,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Velocidad de caída',
+          style: TextStyle(color: Colors.grey[400], fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final choice in FallPace.choices)
+              _ChoiceChip(
+                label: choice.label,
+                selected: pace == choice,
+                onTap: () => onSelected(choice.factor),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          pace.hint,
+          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
   }
 }
 
