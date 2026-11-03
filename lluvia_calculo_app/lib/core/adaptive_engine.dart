@@ -49,11 +49,19 @@ class AdaptiveParameters {
 /// - Memoria persistente por jugador
 class AdaptiveEngine {
   // Umbrales para ajuste de dificultad
-  static const double _highAccuracyThreshold = 0.80;
+  static const double _highAccuracyThreshold = 0.85;
   static const double _lowAccuracyThreshold = 0.50;
-  static const int _minSamplesForAdjustment = 5;
-  static const int _streakToIncrease = 5;
+  static const int _minSamplesForAdjustment = 8;
+  static const int _streakToIncrease = 12;
+  static const int _correctsToConsiderIncrease = 18;
   static const double _fastResponseMs = 3000;
+
+  /// Aciertos en el peldaño actual antes de pasar al siguiente.
+  /// El primer salto pide 11; cada nivel siguiente pide 3 más.
+  static int correctsBeforeNextTier(int tier) {
+    final safe = tier.clamp(1, OperationDifficulty.maxTier);
+    return 8 + safe * 3;
+  }
   
   /// Calcula parámetros adaptativos basados en perfil y sesión actual
   AdaptiveParameters calculate({
@@ -95,12 +103,10 @@ class AdaptiveEngine {
     bool shouldDecrease = false;
     
     if (sessionSamples >= _minSamplesForAdjustment) {
-      // Solo subir si:
-      // 1. Alta precisión en sesión
-      // 2. Racha sólida (al menos 5 consecutivos)
-      // 3. No subir más de 1 tier por sesión
-      if (currentSession.sessionAccuracy >= _highAccuracyThreshold && 
+      // Subir solo con muchos aciertos y una racha larga. Un peldaño, no una escalada.
+      if (currentSession.sessionAccuracy >= _highAccuracyThreshold &&
           currentSession.streak >= _streakToIncrease &&
+          currentSession.correctThisSession >= _correctsToConsiderIncrease &&
           suggestedTier < AdaptiveParameters.maxTier) {
         shouldIncrease = true;
       } 
@@ -158,8 +164,8 @@ class AdaptiveEngine {
       baseTier = max(1, baseTier - 1);
     }
     
-    // Ajustar según sesión actual (pero máximo ±1)
-    if (session.correctThisSession > 15 && session.sessionAccuracy > _highAccuracyThreshold) {
+    // Como mucho un peldaño, y solo tras una sesión ya larga de aciertos.
+    if (session.correctThisSession > 40 && session.sessionAccuracy > _highAccuracyThreshold) {
       baseTier = min(AdaptiveParameters.maxTier, baseTier + 1);
     } else if (session.sessionAccuracy < 0.4 && session.incorrectThisSession > 5) {
       baseTier = max(1, baseTier - 1);
@@ -187,12 +193,7 @@ class AdaptiveEngine {
       multiplier -= 0.2;
     }
     
-    // Racha alta = pueden ir más rápido
-    if (session.streak >= 10) {
-      multiplier += 0.1;
-    }
-    
-    return multiplier.clamp(0.5, 2.0);
+    return multiplier.clamp(0.5, 1.35);
   }
 
   double _calculateSpawnInterval(GameMode mode, int tier, PlayerProfile profile) {
@@ -221,13 +222,13 @@ class AdaptiveEngine {
         break;
     }
     
-    // Reducir intervalo con tier más alto (pero suavemente)
-    baseInterval -= (tier - 1) * 150;
+    // Un peldaño más alto apenas junta las operaciones.
+    baseInterval -= (tier - 1) * 40;
     
     // Ajustar por factor adaptativo del jugador
     baseInterval /= profile.adaptiveSpeedFactor;
     
-    return baseInterval.clamp(1200, 5000);
+    return baseInterval.clamp(2000, 6000);
   }
 
   OperationFamily _suggestFamilyToPractice(PlayerProfile profile, List<OperationFamily> weakFamilies) {
@@ -286,17 +287,6 @@ class AdaptiveEngine {
       ? ((currentStats.avgResponseTimeMs * (totalResponses - 1)) + responseTimeMs) / totalResponses
       : responseTimeMs.toDouble();
     
-    // Actualizar tier máximo desbloqueado para esta familia
-    int newMaxTier = currentStats.maxTierUnlocked;
-    if (correct && tier >= currentStats.maxTierUnlocked) {
-      // Solo desbloquear si tiene buena precisión reciente
-      final recentAccuracy = newCorrect / totalResponses;
-      if (recentAccuracy >= 0.7 && newCorrect >= 5) {
-        // Desbloquear siguiente tier (máximo +1)
-        newMaxTier = min(AdaptiveParameters.maxTier, tier + 1);
-      }
-    }
-    
     // Actualizar stats por tier dentro de la familia
     final tierStats = Map<int, TierStats>.from(currentStats.tierStats);
     final currentTierStats = tierStats[tier] ?? const TierStats();
@@ -308,6 +298,17 @@ class AdaptiveEngine {
         : responseTimeMs.toDouble(),
     );
     
+    // El siguiente peldaño se guarda solo tras bastantes aciertos en este.
+    int newMaxTier = currentStats.maxTierUnlocked;
+    final atTier = tierStats[tier];
+    if (correct && atTier != null && tier >= currentStats.maxTierUnlocked) {
+      final samples = atTier.correct + atTier.incorrect;
+      final accuracy = samples == 0 ? 0.0 : atTier.correct / samples;
+      if (atTier.correct >= 12 && accuracy >= 0.8) {
+        newMaxTier = min(AdaptiveParameters.maxTier, tier + 1);
+      }
+    }
+
     final updatedFamilyStats = currentStats.copyWith(
       correct: newCorrect,
       incorrect: newIncorrect,
@@ -329,7 +330,7 @@ class AdaptiveEngine {
     // Calcular nuevo factor de velocidad adaptativo
     double newSpeedFactor = profile.adaptiveSpeedFactor;
     if (correct && responseTimeMs < _fastResponseMs) {
-      newSpeedFactor = min(2.0, newSpeedFactor + 0.015);
+      newSpeedFactor = min(1.2, newSpeedFactor + 0.004);
     } else if (!correct) {
       newSpeedFactor = max(0.5, newSpeedFactor - 0.025);
     }
@@ -387,7 +388,9 @@ class AdaptiveEngine {
     int currentTier = familyStats.maxTierUnlocked;
     
     // Si racha actual es buena, permitir subir 1
-    if (session.streak >= _streakToIncrease && session.sessionAccuracy >= _highAccuracyThreshold) {
+    if (session.streak >= _streakToIncrease &&
+        session.correctThisSession >= _correctsToConsiderIncrease &&
+        session.sessionAccuracy >= _highAccuracyThreshold) {
       return min(AdaptiveParameters.maxTier, currentTier + 1);
     }
     

@@ -45,9 +45,9 @@ void main() {
         
         final session = GameState.initial().copyWith(
           isRunning: true,
-          correctThisSession: 15,
-          incorrectThisSession: 1,
-          streak: 8,
+          correctThisSession: 20,
+          incorrectThisSession: 2,
+          streak: 12,
         );
         
         final params = engine.calculate(
@@ -57,7 +57,28 @@ void main() {
         );
         
         expect(params.shouldIncreaseDifficulty, isTrue,
-          reason: 'Con 87.5% precisión y racha de 8, debe sugerir subir');
+          reason: 'Con más de 18 aciertos y racha de 12, puede subir un peldaño');
+      });
+
+      test('una racha corta todavía no sube la dificultad', () {
+        final profile = PlayerProfile.create('Niño').copyWith(
+          totalCorrect: 30,
+          totalIncorrect: 4,
+          globalTierUnlocked: 2,
+        );
+        final session = GameState.initial().copyWith(
+          isRunning: true,
+          correctThisSession: 8,
+          incorrectThisSession: 1,
+          streak: 6,
+          currentTier: 2,
+        );
+        final params = engine.calculate(
+          profile: profile,
+          currentSession: session,
+          mode: GameMode.aprendizaje,
+        );
+        expect(params.shouldIncreaseDifficulty, isFalse);
       });
 
       test('sugiere bajar dificultad con baja precisión', () {
@@ -301,9 +322,24 @@ void main() {
           },
         );
         
-        final session = GameState.initial().copyWith(
-          streak: 7,
+        final early = GameState.initial().copyWith(
+          streak: 6,
           correctThisSession: 10,
+          incorrectThisSession: 1,
+        );
+        expect(
+          engine.getNextOperationTier(
+            profile: profile,
+            session: early,
+            family: OperationFamily.sumas,
+          ),
+          equals(2),
+          reason: 'Con pocos aciertos se queda en el mismo peldaño',
+        );
+
+        final session = GameState.initial().copyWith(
+          streak: 12,
+          correctThisSession: 18,
           incorrectThisSession: 1,
         );
         
@@ -314,7 +350,15 @@ void main() {
         );
         
         expect(tier, equals(3),
-          reason: 'Con racha de 7 y >80% precisión, debe subir a tier 3');
+          reason: 'Tras una racha larga sube un solo peldaño');
+      });
+
+      test('cada peldaño pide más aciertos que el anterior', () {
+        expect(AdaptiveEngine.correctsBeforeNextTier(1), 11);
+        expect(
+          AdaptiveEngine.correctsBeforeNextTier(4),
+          greaterThan(AdaptiveEngine.correctsBeforeNextTier(1)),
+        );
       });
 
       test('baja tier con muchos fallos', () {

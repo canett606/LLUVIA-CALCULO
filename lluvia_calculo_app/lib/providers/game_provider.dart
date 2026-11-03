@@ -40,6 +40,8 @@ class GameProvider extends ChangeNotifier {
   
   bool _isInitialized = false;
   String _inputBuffer = '';
+  int _steadyCorrect = 0;
+  int _recentMisses = 0;
 
   GameProvider({
     required StorageService storage,
@@ -220,17 +222,18 @@ class GameProvider extends ChangeNotifier {
 
     _stopAllTimers();
     _inputBuffer = '';
+    _steadyCorrect = 0;
+    _recentMisses = 0;
     _generator.resetSession();
 
     final starting = GameState.forMode(_state.mode, family: _state.selectedFamily);
+    // Aunque el perfil recuerde un nivel alto, la partida empieza fácil
+    // y solo sube después de muchos aciertos.
     _state = starting.copyWith(
       isRunning: true,
       isPaused: false,
       isGameOver: false,
-      currentTier: _adaptiveParams.suggestedTier.clamp(
-        1,
-        OperationDifficulty.maxTier,
-      ),
+      currentTier: _adaptiveParams.suggestedTier.clamp(1, 3),
       lastMessage: starting.mode == GameMode.infinito
           ? 'Decid el resultado en voz alta'
           : '¡Empieza la lluvia!',
@@ -283,6 +286,8 @@ class GameProvider extends ChangeNotifier {
   /// Reinicia el juego al estado inicial
   void resetGame() {
     _stopAllTimers();
+    _steadyCorrect = 0;
+    _recentMisses = 0;
     _state = GameState.forMode(_state.mode, family: _state.selectedFamily);
     _inputBuffer = '';
     notifyListeners();
@@ -442,30 +447,7 @@ class GameProvider extends ChangeNotifier {
     final maxDrops = _state.mode == GameMode.infinito ? 4 : 8;
     if (_state.activeDrops.length >= maxDrops) return;
     
-    // Determinar tier basado en modo adaptativo
-    int tier = _state.currentTier;
-    
-    // En modo aprendizaje, variar tier según params adaptativos (hasta nivel 10)
-    if (_state.mode == GameMode.aprendizaje) {
-      if (_adaptiveParams.shouldIncreaseDifficulty &&
-          tier < OperationDifficulty.maxTier) {
-        tier = min(OperationDifficulty.maxTier, tier + 1);
-        _state = _state.copyWith(currentTier: tier);
-      } else if (_adaptiveParams.shouldDecreaseDifficulty && tier > 1) {
-        tier = max(1, tier - 1);
-        _state = _state.copyWith(currentTier: tier);
-      }
-    } else {
-      // En el resto de modos, subir tier con el nivel de sesión
-      final levelTier = min(
-        OperationDifficulty.maxTier,
-        max(tier, 1 + (_state.level - 1)),
-      );
-      if (levelTier != tier) {
-        tier = levelTier;
-        _state = _state.copyWith(currentTier: tier);
-      }
-    }
+    final tier = _state.currentTier;
     
     // Generar operación
     final operation = _generator.generate(
@@ -501,7 +483,7 @@ class GameProvider extends ChangeNotifier {
     
     // Ajustar por nivel y parámetros adaptativos
     final speedMultiplier = _adaptiveParams.speedMultiplier;
-    final levelBonus = (_state.level - 1) * 0.02;
+    final levelBonus = min(0.04, (_state.level - 1) * 0.005);
     final speed = _fallPace.applySpeed(
       baseSpeed * speedMultiplier + levelBonus + _random.nextDouble() * 0.03,
     );
@@ -541,6 +523,7 @@ class GameProvider extends ChangeNotifier {
     
     // Actualizar nivel si corresponde
     _updateLevel();
+    _advanceTierAfterCorrect();
     
     // Actualizar perfil
     if (_currentProfile != null && result.hitDrop != null) {
@@ -583,6 +566,7 @@ class GameProvider extends ChangeNotifier {
       incorrectThisSession: _state.incorrectThisSession + 1,
       lastMessage: missResult.message,
     );
+    _easeTierAfterMiss();
     
     // Actualizar perfil
     if (_currentProfile != null) {
@@ -647,36 +631,55 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Sube un solo peldaño tras muchos aciertos en el actual.
+  void _advanceTierAfterCorrect() {
+    _recentMisses = 0;
+    _steadyCorrect++;
+    final need = AdaptiveEngine.correctsBeforeNextTier(_state.currentTier);
+    if (_steadyCorrect < need) return;
+    if (_state.streak < 6) return;
+    if (_state.sessionAccuracy < 0.7) return;
+    if (_state.currentTier >= OperationDifficulty.maxTier) return;
+
+    _steadyCorrect = 0;
+    _state = _state.copyWith(
+      currentTier: _state.currentTier + 1,
+      lastMessage: 'Un poco más difícil',
+    );
+  }
+
+  /// Unos fallos seguidos bajan un peldaño, para no dejar al niño atascado.
+  void _easeTierAfterMiss() {
+    _steadyCorrect = max(0, _steadyCorrect - 2);
+    _recentMisses++;
+    if (_recentMisses < 3 || _state.currentTier <= 1) return;
+    _recentMisses = 0;
+    _steadyCorrect = 0;
+    _state = _state.copyWith(currentTier: _state.currentTier - 1);
+  }
+
   void _updateLevel() {
     int newLevel;
     
     switch (_state.mode) {
       case GameMode.aprendizaje:
-        newLevel = 1 + (_state.score ~/ 100);
+        newLevel = 1 + (_state.score ~/ 280);
         break;
       case GameMode.porTiempo:
-        newLevel = 1 + (_state.score ~/ 80);
+        newLevel = 1 + (_state.score ~/ 220);
         break;
       case GameMode.porPuntuacion:
-        newLevel = 1 + (_state.correctThisSession ~/ 10);
+        newLevel = 1 + (_state.correctThisSession ~/ 25);
         break;
       case GameMode.supervivencia:
-        newLevel = 1 + (_state.score ~/ 60);
+        newLevel = 1 + (_state.score ~/ 180);
         break;
       case GameMode.porNiveles:
-        newLevel = 1 + (_state.score ~/ 120);
-        // Desbloquear tier en modo niveles (hasta 10)
-        if (newLevel > _state.level &&
-            newLevel <= OperationDifficulty.maxTier) {
-          _state = _state.copyWith(
-            currentTier: min(OperationDifficulty.maxTier, newLevel),
-            lastMessage: '¡Desbloqueado nivel $newLevel!',
-          );
-        }
+        newLevel = 1 + (_state.score ~/ 400);
         break;
       case GameMode.infinito:
       case GameMode.dueloLocal:
-        newLevel = 1 + (_state.score ~/ 100);
+        newLevel = 1 + (_state.score ~/ 280);
         break;
     }
     

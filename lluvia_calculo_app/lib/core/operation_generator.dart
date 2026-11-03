@@ -101,7 +101,7 @@ class OperationGenerator {
     int effectiveTier = currentTier;
     final familyStats = profile.familyStats[targetFamily];
     if (familyStats != null) {
-      if (familyStats.accuracy > 0.85 && familyStats.correct >= 10) {
+      if (familyStats.accuracy > 0.9 && familyStats.correct >= 30) {
         effectiveTier = min(maxTier, familyStats.maxTierUnlocked + 1);
       } else if (familyStats.accuracy < 0.5 && familyStats.incorrect >= 5) {
         effectiveTier = max(1, currentTier - 1);

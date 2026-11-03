@@ -155,7 +155,7 @@ class _TournamentMatchScreenState extends State<TournamentMatchScreen> {
   void _spawnDrop(Random random) {
     // Progresión por spawns (sincronizada entre rivales con la misma seed)
     _spawnCount++;
-    final tier = (2 + (_spawnCount ~/ 6)).clamp(1, OperationDifficulty.maxTier);
+    final tier = (1 + (_spawnCount ~/ 12)).clamp(1, OperationDifficulty.maxTier);
     final operation = _generator.generate(
       family: OperationFamily.todas,
       tier: tier,

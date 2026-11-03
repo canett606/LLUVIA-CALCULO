@@ -113,7 +113,7 @@ class _MultiplayerGameScreenState extends State<MultiplayerGameScreen> {
 
     // Misma progresión para ambos (seed + contador de spawns compartido)
     _spawnCount++;
-    final tier = (2 + (_spawnCount ~/ 6)).clamp(1, OperationDifficulty.maxTier);
+    final tier = (1 + (_spawnCount ~/ 12)).clamp(1, OperationDifficulty.maxTier);
     final op = _generator.generate(tier: tier, family: OperationFamily.todas);
     final x = 0.1 + Random().nextDouble() * 0.8;
     
