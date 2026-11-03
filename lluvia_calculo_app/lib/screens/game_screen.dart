@@ -820,7 +820,7 @@ class _TapTarget extends StatelessWidget {
   }
 }
 
-class _BigButton extends StatelessWidget {
+class _BigButton extends StatefulWidget {
   final String label;
   final IconData icon;
   final Color color;
@@ -836,19 +836,37 @@ class _BigButton extends StatelessWidget {
   });
 
   @override
+  State<_BigButton> createState() => _BigButtonState();
+}
+
+class _BigButtonState extends State<_BigButton> {
+  DateTime? _lastTap;
+
+  /// Safari dispara a la vez onPointerUp y onPressed. Un segundo toque
+  /// en Continuar volvía a pausar la partida al momento.
+  void _fire() {
+    final now = DateTime.now();
+    if (_lastTap != null && now.difference(_lastTap!) < const Duration(milliseconds: 400)) {
+      return;
+    }
+    _lastTap = now;
+    widget.onTap();
+  }
+
+  @override
   Widget build(BuildContext context) {
     // ElevatedButton + onPointerUp: fiable en iPhone Safari
     return SizedBox(
       width: double.infinity,
-      height: height,
+      height: widget.height,
       child: Listener(
         behavior: HitTestBehavior.opaque,
-        onPointerUp: (_) => onTap(),
+        onPointerUp: (_) => _fire(),
         child: ElevatedButton.icon(
-          onPressed: onTap,
-          icon: Icon(icon, size: 26, color: Colors.black87),
+          onPressed: _fire,
+          icon: Icon(widget.icon, size: 26, color: Colors.black87),
           label: Text(
-            label,
+            widget.label,
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -857,7 +875,7 @@ class _BigButton extends StatelessWidget {
             ),
           ),
           style: ElevatedButton.styleFrom(
-            backgroundColor: color,
+            backgroundColor: widget.color,
             foregroundColor: Colors.black87,
             elevation: 3,
             padding: EdgeInsets.zero,
